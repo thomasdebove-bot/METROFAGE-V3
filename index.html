@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Compte-rendu MZA</title>
+  <style>
+    @page { size: A4; margin: 20mm; }
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: #f4f4f4;
+      color: #111;
+    }
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto;
+      padding: 20mm 18mm;
+      box-sizing: border-box;
+      background: #fff;
+    }
+    .logo-block {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 28px;
+    }
+    .logo-icon {
+      position: relative;
+      width: 64px;
+      height: 52px;
+    }
+    .logo-icon span {
+      position: absolute;
+      left: 0;
+      width: 46px;
+      height: 8px;
+      background: #e60000;
+      border-radius: 1px;
+    }
+    .logo-icon span:nth-child(1) { top: 4px; }
+    .logo-icon span:nth-child(2) { top: 20px; }
+    .logo-icon span:nth-child(3) { top: 36px; }
+    .logo-icon::after {
+      content: "";
+      position: absolute;
+      right: 0;
+      top: 0;
+      width: 14px;
+      height: 44px;
+      border: 8px solid #e60000;
+      border-left: none;
+      transform: skewY(-30deg);
+      box-sizing: border-box;
+    }
+    .logo-text .brand {
+      font-size: 50px;
+      letter-spacing: 2px;
+      font-weight: 800;
+      line-height: 0.9;
+    }
+    .logo-text .sub {
+      font-size: 16px;
+      letter-spacing: 1px;
+      font-weight: 700;
+      margin-top: 8px;
+    }
+
+    .cover-box {
+      border: 2px solid #1f1f1f;
+      min-height: 250px;
+      display: grid;
+      grid-template-columns: 1fr 1.25fr;
+      gap: 24px;
+      align-items: center;
+      padding: 20px 24px;
+      margin-bottom: 34px;
+    }
+    .project-image-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 200px;
+      border: 1px solid #cfcfcf;
+      background: #fafafa;
+      padding: 8px;
+    }
+    .project-image {
+      max-width: 100%;
+      max-height: 190px;
+      object-fit: contain;
+    }
+    .meta {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      font-size: 24px;
+      font-weight: 700;
+    }
+    .editable {
+      display: inline-block;
+      min-width: 220px;
+      border-bottom: 1px dashed #777;
+      padding: 2px 4px;
+      outline: none;
+      font-weight: 600;
+    }
+
+    .attendance {
+      border: 2px solid #1f1f1f;
+      margin-bottom: 26px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 16px;
+    }
+    th, td {
+      border: 1px solid #1f1f1f;
+      padding: 6px 8px;
+      text-align: center;
+    }
+    th {
+      background: #f7a8a8;
+      font-size: 20px;
+    }
+    td[contenteditable="true"] { background: #fffef5; }
+
+    .next-meeting {
+      border: 2px solid #1f1f1f;
+      text-align: center;
+      font-size: 38px;
+      font-weight: 800;
+      padding: 10px;
+      letter-spacing: 1px;
+    }
+
+    @media print {
+      body { background: #fff; }
+      .page { margin: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="logo-block" aria-label="Logo Eiffage en haut à gauche">
+      <div class="logo-icon" aria-hidden="true"><span></span><span></span><span></span></div>
+      <div class="logo-text">
+        <div class="brand">EIFFAGE</div>
+        <div class="sub">CONSTRUCTION</div>
+      </div>
+    </header>
+
+    <section class="cover-box" aria-label="Encadré projet MZA">
+      <div class="project-image-wrap">
+        <img
+          class="project-image"
+          src="file://///192.168.10.100/02 - affaires/02.2 - SYNTHESE/ZZ - METRONOME/Content/MZA.png"
+          alt="Image du projet MZA"
+        />
+      </div>
+      <div class="meta">
+        <div>MZA</div>
+        <div>Compte-rendu réunion <span class="editable" contenteditable="true">Équipe C&amp;C</span></div>
+        <div>N°<span class="editable" contenteditable="true">27</span></div>
+        <div><span class="editable" contenteditable="true">09/02/2026</span></div>
+      </div>
+    </section>
+
+    <section class="attendance" aria-label="Liste des présents absents">
+      <table>
+        <thead>
+          <tr>
+            <th>Entité</th>
+            <th>Nom</th>
+            <th>Prénom</th>
+            <th>Email</th>
+            <th>Présent</th>
+            <th>Diffusion</th>
+            <th>Convocation</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>EC</td><td contenteditable="true">Bouilleveaux</td><td contenteditable="true">Cyril</td><td contenteditable="true">cyril.bouilleveaux@eiffage.com</td><td contenteditable="true"></td><td contenteditable="true">X</td><td contenteditable="true"></td></tr>
+          <tr><td>EC</td><td contenteditable="true">Lareyre</td><td contenteditable="true">Florentin</td><td contenteditable="true">florentin.lareyre@eiffage.com</td><td contenteditable="true">X</td><td contenteditable="true">X</td><td contenteditable="true"></td></tr>
+          <tr><td>EC</td><td contenteditable="true">Seigneurin</td><td contenteditable="true">Pascal</td><td contenteditable="true">pascal.seigneurin@eiffage.com</td><td contenteditable="true"></td><td contenteditable="true">X</td><td contenteditable="true">X</td></tr>
+          <tr><td>EC</td><td contenteditable="true">Cazaledes</td><td contenteditable="true">Bastien</td><td contenteditable="true">bastien.cazaledes@eiffage.com</td><td contenteditable="true">X</td><td contenteditable="true">X</td><td contenteditable="true">X</td></tr>
+          <tr><td>EC</td><td contenteditable="true">Phongsavang</td><td contenteditable="true">Nicolas</td><td contenteditable="true">nicolas.phongsavang@eiffage.com</td><td contenteditable="true"></td><td contenteditable="true">X</td><td contenteditable="true">X</td></tr>
+          <tr><td>EC</td><td contenteditable="true">Lachaume</td><td contenteditable="true">Damien</td><td contenteditable="true">damien.lachaume@eiffage.com</td><td contenteditable="true">X</td><td contenteditable="true">X</td><td contenteditable="true">X</td></tr>
+          <tr><td>EC</td><td contenteditable="true">Ayac</td><td contenteditable="true">Florian</td><td contenteditable="true">florian.ayac@eiffage.com</td><td contenteditable="true"></td><td contenteditable="true">X</td><td contenteditable="true"></td></tr>
+          <tr><td>&nbsp;</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+          <tr><td>&nbsp;</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+          <tr><td>&nbsp;</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="next-meeting" aria-label="Date de prochaine réunion">
+      PROCHAINE RÉUNION - <span class="editable" contenteditable="true">23/02/2026</span>
+    </section>
+  </main>
+</body>
+</html>
