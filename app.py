@@ -1995,17 +1995,11 @@ PAGINATION_JS = r"""
 
   function calcAvailable(page, includePresence){
     const pageContent = page.querySelector('.pageContent');
-    const footer = page.querySelector('.docFooter');
     const header = page.querySelector('.reportHeader');
     const pageRect = page.getBoundingClientRect();
     if(!pageContent) return pageRect.height;
     const styles = window.getComputedStyle(pageContent);
     let available = pageRect.height - px(styles.paddingTop) - px(styles.paddingBottom);
-    const reserveFooter = !document.body.classList.contains('constraint-off-footerReserve');
-    const rootStyles = getComputedStyle(document.documentElement);
-    const reserveFactorRaw = parseFloat((rootStyles.getPropertyValue('--footer-reserve-factor') || '1').trim());
-    const reserveFactor = Number.isNaN(reserveFactorRaw) ? 1 : reserveFactorRaw;
-    if(reserveFooter && footer){ available -= (footer.getBoundingClientRect().height * reserveFactor); }
     if(header){ available -= header.getBoundingClientRect().height; }
     return available;
   }
@@ -3181,7 +3175,7 @@ body{{padding:14px 14px 14px 280px;}}
 .wrap{{display:flex;flex-direction:column;gap:12px;align-items:center;}}
 .page{{width:210mm;height:297mm;min-height:297mm;position:relative;background:#fff;overflow:visible;break-after:page;page-break-after:always;}}
 .page:last-child{{break-after:auto;page-break-after:auto;}}
-.pageContent{{padding:10mm 8mm 34mm 8mm;}}
+.pageContent{{padding:10mm 8mm 10mm 8mm;}}
 .page--cover .pageContent{{padding:10mm 8mm 10mm 8mm;}}
 .muted{{color:var(--muted)}}
 .small{{font-size:12px}}
@@ -3205,10 +3199,10 @@ body.printPreviewMode .noPrintRow{{display:none!important}}
 .topPage{{transform:scale(var(--top-scale));transform-origin:top left}}
 @media print{{.topPage{{margin:0;}}}}
 .reportTables{{margin-top:0}}
-.coverLayout{{display:flex;flex-direction:column;gap:10px;padding:8mm 6mm 0 6mm}}
+.coverLayout{{display:flex;flex-direction:column;gap:10px;padding:4mm 6mm 0 6mm}}
 .coverBlock{{margin-bottom:6mm;}}
 .coverPresence{{margin-top:4mm}}
-.coverHeaderLogo{{display:flex;justify-content:flex-start;align-items:flex-start;margin-bottom:2mm}}
+.coverHeaderLogo{{display:flex;justify-content:flex-start;align-items:flex-start;margin-bottom:10mm}}
 .coverLogo{{height:64px;width:auto;display:block}}
 .coverFooterMark{{height:16px;width:auto;display:block}}
 .coverProjectCard{{border:2px solid #111;display:grid;grid-template-columns:150px 1fr;gap:18px;padding:12px 14px;align-items:center;max-width:180mm;margin:0 auto}}
@@ -3216,19 +3210,19 @@ body.printPreviewMode .noPrintRow{{display:none!important}}
 .coverProjectImage{{max-width:130px;max-height:130px;object-fit:contain;display:block}}
 .coverProjectImageFallback{{width:120px;height:120px;border:1px solid #d1d5db;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:900;color:#64748b}}
 .coverProjectMeta{{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px}}
-.coverProjectLabel{{font-size:30px;font-weight:1000;line-height:1}}
-.coverProjectTitle{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:22px;font-weight:700;color:#111;line-height:1.15}}
-.coverProjectNumber{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:28px;font-weight:800;color:#111}}
-.coverProjectDate{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:22px;font-weight:700;color:#111}}
-.coverDocRef{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:14px;font-weight:700;color:#374151;max-width:100%}}
+.coverProjectLabel{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:34px;font-weight:900;line-height:1;color:#0b2a52}}
+.coverProjectTitle{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:24px;font-weight:700;color:#111;line-height:1.12}}
+.coverProjectNumber{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:32px;font-weight:800;color:#111;line-height:1}}
+.coverProjectDate{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:26px;font-weight:700;color:#111;line-height:1}}
+.coverDocRef{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:16px;font-weight:700;color:#233a57;max-width:100%}}
 .editInline{{display:inline-block;min-width:40px;padding:0 4px;border-bottom:2px dashed #cbd5e1;outline:none}}
-.coverInlineWide{{min-width:120px}}
-.coverInlineDate{{min-width:110px}}
+.coverInlineWide{{min-width:130px}}
+.coverInlineDate{{min-width:120px}}
 @media print{{.editInline{{border-bottom:none}}}}
 .nextMeetingBox{{margin:6mm auto 0 auto;max-width:180mm;border:2px solid #111;padding:10px 8px;font-weight:1000;text-align:center}}
-.nextMeetingLine1{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:28px;font-weight:900;text-transform:uppercase}}
-.nextMeetingLine3{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:22px;color:#111;margin-top:4px;outline:none}}
-@media print{{.coverProjectLabel{{font-size:26px}} .coverProjectTitle{{font-size:20px}} .coverProjectNumber{{font-size:24px}} .coverProjectDate{{font-size:20px}}}}
+.nextMeetingLine1{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:34px;font-weight:900;text-transform:uppercase}}
+.nextMeetingLine3{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:28px;color:#111;margin-top:4px;outline:none}}
+@media print{{.coverProjectLabel{{font-size:30px}} .coverProjectTitle{{font-size:22px}} .coverProjectNumber{{font-size:28px}} .coverProjectDate{{font-size:24px}} .nextMeetingLine1{{font-size:28px}} .nextMeetingLine3{{font-size:24px}}}}
 
 /* PROJECT BANNER */
 .banner{{
@@ -3472,12 +3466,6 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
 .presenceGrip{{position:absolute;top:0;right:-6px;width:12px;height:100%;cursor:col-resize}}
 .presenceGrip::after{{content:"";position:absolute;top:3px;bottom:3px;left:5px;width:2px;background:var(--brand-red);border-radius:2px;opacity:.9}}
 .presenceUsersTable th:hover .presenceGrip::after{{background:#b91c1c}}
-.docFooter{{position:absolute;left:0;right:0;bottom:0;height:20mm;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:3mm 10mm;border-top:2px solid var(--brand-red);background:#fff;overflow:hidden;width:100%;box-sizing:border-box}}
-.footLeft,.footCenter,.footRight{{position:absolute;z-index:2}}
-.footLeft{{left:0}}
-.footCenter{{left:50%;transform:translateX(-50%);display:flex;align-items:center;justify-content:center;font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:11px;font-weight:700;color:#111}}
-.footRight{{right:10mm;font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:9px;font-weight:700;color:#111;min-width:70px;text-align:right}}
-.footPageNumber{{display:inline-block}}
 .tempoLegal{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:10px;line-height:1.3;color:#6b7280;font-weight:600}}
 .footImg{{display:block;max-height:32px;width:auto}}
 .footMark{{max-height:16px}}
@@ -3487,10 +3475,9 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
   body{{padding:0}}
   .actions,.rangePanel,.constraintsPanel{{display:none!important}}
   .page{{width:210mm;min-height:297mm;height:auto;margin:0;box-shadow:none;break-after:auto;page-break-after:auto;}}
-  .page--report .pageContent{{padding-top:16mm;padding-bottom:16mm;}}
-  .page--cover .pageContent{{padding:10mm 8mm 20mm 8mm;}}
+  .page--report .pageContent{{padding-top:8mm;padding-bottom:8mm;}}
+  .page--cover .pageContent{{padding:8mm;}}
   .reportHeader{{position:absolute;top:0;left:0;right:0;background:#fff;padding:4mm 8mm 2mm 8mm;z-index:20;}}
-  .docFooter{{position:absolute;bottom:0;left:0;right:0;}}
   .presenceGrip{{display:none!important}}
   .presenceUsersTable thead{{display:table-header-group}}
   .presenceUsersTable tr{{break-inside:avoid;page-break-inside:avoid}}
@@ -3503,7 +3490,6 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
 
     # Banner / cover HTML
     logo_eiffage = _logo_data_url(LOGO_EIFFAGE_PATH)
-    logo_eiffage_square_90 = _logo_data_url(LOGO_EIFFAGE_SQUARE_90_PATH)
     cover_html = ""
 
     cr_date_txt = (meet_date or ref_date).strftime("%d/%m/%Y")
@@ -3624,11 +3610,6 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
           {top_html}
         </div>
       </div>
-      <div class="docFooter">
-        <div class="footLeft"></div>
-        <div class="footCenter">{("<img class='coverFooterMark' src='" + logo_eiffage_square_90 + "' alt='EIFFAGE' />") if logo_eiffage_square_90 else ""}</div>
-        <div class="footRight"><span class="footPageNumber"></span></div>
-      </div>
     </section>
 
     <div class="reportPages">
@@ -3643,11 +3624,6 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
             </div>
           </div>
         </div>
-        <div class="docFooter">
-          <div class="footLeft"></div>
-          <div class="footCenter">{("<img class='coverFooterMark' src='" + logo_eiffage_square_90 + "' alt='EIFFAGE' />") if logo_eiffage_square_90 else ""}</div>
-          <div class="footRight"><span class="footPageNumber"></span></div>
-        </div>
       </section>
     </div>
   </div>
@@ -3659,11 +3635,6 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
           {report_header_html}
           <div class="reportBlocks"></div>
         </div>
-      </div>
-      <div class="docFooter">
-        <div class="footLeft"></div>
-        <div class="footCenter">{("<img class='coverFooterMark' src='" + logo_eiffage_square_90 + "' alt='EIFFAGE' />") if logo_eiffage_square_90 else ""}</div>
-        <div class="footRight"><span class="footPageNumber"></span></div>
       </div>
     </section>
   </template>
