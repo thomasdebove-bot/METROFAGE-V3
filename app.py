@@ -122,6 +122,10 @@ CONTENT_PATH = os.getenv(
     "METRONOME_CONTENT",
     r"\\192.168.10.100\02 - affaires\02.2 - SYNTHESE\ZZ - METRONOME\Content",
 )
+DEFAULT_MZA_COVER_IMAGE_PATH = os.getenv(
+    "METRONOME_MZA_COVER_IMAGE",
+    r"\\192.168.10.100\02 - affaires\02.2 - SYNTHESE\ZZ - METRONOME\Content\MZA.png",
+)
 
 # -------------------------
 # COLUMN NAMES (METRONOME EXPORTS)
@@ -3201,27 +3205,30 @@ body.printPreviewMode .noPrintRow{{display:none!important}}
 .topPage{{transform:scale(var(--top-scale));transform-origin:top left}}
 @media print{{.topPage{{margin:0;}}}}
 .reportTables{{margin-top:0}}
-.coverLayout{{display:flex;flex-direction:column;gap:20px;padding:16mm 6mm 0 6mm}}
+.coverLayout{{display:flex;flex-direction:column;gap:10px;padding:8mm 6mm 0 6mm}}
 .coverBlock{{margin-bottom:6mm;}}
-.coverPresence{{margin-top:20px}}
-.coverHeader{{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}}
-.coverBrand{{display:flex;flex-direction:column;gap:10px;max-width:70%}}
-.coverSquare{{display:flex;align-items:flex-start;justify-content:flex-end}}
-.coverLogo{{height:78px;width:auto;display:block}}
-.coverSquareLogo{{height:92px;width:auto;display:block}}
+.coverPresence{{margin-top:4mm}}
+.coverHeaderLogo{{display:flex;justify-content:flex-start;align-items:flex-start;margin-bottom:2mm}}
+.coverLogo{{height:64px;width:auto;display:block}}
 .coverFooterMark{{height:16px;width:auto;display:block}}
-.coverMeetingLine{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:18px;font-weight:700;color:#111}}
-.coverDocRef{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:18px;font-weight:700;color:#111}}
-.coverTitleBlock{{text-align:right;font-weight:900;display:flex;flex-direction:column;align-items:flex-end;gap:6px;margin-top:22px;width:100%}}
-.coverTitle{{font-size:22px;font-weight:900;color:#111;letter-spacing:.4px}}
-.coverSubtitle{{font-size:22px;font-weight:900;color:#111;letter-spacing:.4px}}
+.coverProjectCard{{border:2px solid #111;display:grid;grid-template-columns:150px 1fr;gap:18px;padding:12px 14px;align-items:center;max-width:180mm;margin:0 auto}}
+.coverProjectImageWrap{{display:flex;align-items:center;justify-content:center;min-height:128px}}
+.coverProjectImage{{max-width:130px;max-height:130px;object-fit:contain;display:block}}
+.coverProjectImageFallback{{width:120px;height:120px;border:1px solid #d1d5db;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:900;color:#64748b}}
+.coverProjectMeta{{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px}}
+.coverProjectLabel{{font-size:30px;font-weight:1000;line-height:1}}
+.coverProjectTitle{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:22px;font-weight:700;color:#111;line-height:1.15}}
+.coverProjectNumber{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:28px;font-weight:800;color:#111}}
+.coverProjectDate{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:22px;font-weight:700;color:#111}}
+.coverDocRef{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:14px;font-weight:700;color:#374151;max-width:100%}}
 .editInline{{display:inline-block;min-width:40px;padding:0 4px;border-bottom:2px dashed #cbd5e1;outline:none}}
+.coverInlineWide{{min-width:120px}}
+.coverInlineDate{{min-width:110px}}
 @media print{{.editInline{{border-bottom:none}}}}
-.nextMeetingBox{{margin:18px auto 0 auto;max-width:78%;border:2px solid #111;padding:12px 10px;font-weight:1000}}
-.nextMeetingLine1{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:18px}}
-.nextMeetingLine2{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:18px;color:var(--brand-red);margin-top:5px}}
-.nextMeetingLine3{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:18px;color:#111;margin-top:4px;outline:none}}
-@media print{{.coverTitle{{font-size:30px}} .coverSubtitle{{font-size:30px}} .coverMeetingLine{{font-size:20px}} .coverDocRef{{font-size:20px}}}}
+.nextMeetingBox{{margin:6mm auto 0 auto;max-width:180mm;border:2px solid #111;padding:10px 8px;font-weight:1000;text-align:center}}
+.nextMeetingLine1{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:28px;font-weight:900;text-transform:uppercase}}
+.nextMeetingLine3{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:22px;color:#111;margin-top:4px;outline:none}}
+@media print{{.coverProjectLabel{{font-size:26px}} .coverProjectTitle{{font-size:20px}} .coverProjectNumber{{font-size:24px}} .coverProjectDate{{font-size:20px}}}}
 
 /* PROJECT BANNER */
 .banner{{
@@ -3496,31 +3503,43 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
 
     # Banner / cover HTML
     logo_eiffage = _logo_data_url(LOGO_EIFFAGE_PATH)
-    logo_eiffage_square = _logo_data_url(LOGO_EIFFAGE_SQUARE_PATH)
     logo_eiffage_square_90 = _logo_data_url(LOGO_EIFFAGE_SQUARE_90_PATH)
     cover_html = ""
 
     cr_date_txt = (meet_date or ref_date).strftime("%d/%m/%Y")
+    next_meeting_default = ((meet_date or ref_date) + timedelta(days=14)).strftime("%d/%m/%Y")
+    project_image_src = _img_src_from_ref(proj_img) or _img_src_from_ref(DEFAULT_MZA_COVER_IMAGE_PATH)
 
     document_ref_default = f"{project}_CR_{cr_date_txt.replace('/', '')}"
     cover_html = f"""
       <div class='coverLayout'>
-        <div class='coverHeader'>
-          <div class='coverBrand'>
-            {("<img class='coverLogo' src='" + logo_eiffage + "' alt='EIFFAGE' />") if logo_eiffage else ""}
-            <div class='coverMeetingLine'>
-              Réunion <span contenteditable='true' class='editInline' data-sync='cr-number'>{_escape(cr_number_default)}</span>
-              du <strong>{_escape(cr_date_txt)}</strong>
+        <div class='coverHeaderLogo'>
+          {("<img class='coverLogo' src='" + logo_eiffage + "' alt='EIFFAGE' />") if logo_eiffage else ""}
+        </div>
+
+        <div class='coverProjectCard'>
+          <div class='coverProjectImageWrap'>
+            {("<img class='coverProjectImage' src='" + _escape(project_image_src) + "' alt='Projet MZA' />") if project_image_src else "<div class='coverProjectImageFallback'>MZA</div>"}
+          </div>
+          <div class='coverProjectMeta'>
+            <div class='coverProjectLabel' contenteditable='true'>MZA</div>
+            <div class='coverProjectTitle'>
+              Compte-rendu réunion
+              <span contenteditable='true' class='editInline coverInlineWide'>Équipe C&amp;C</span>
             </div>
+            <div class='coverProjectNumber'>N°<span contenteditable='true' class='editInline' data-sync='cr-number'>{_escape(cr_number_default)}</span></div>
+            <div class='coverProjectDate'><span contenteditable='true' class='editInline coverInlineDate'>{_escape(cr_date_txt)}</span></div>
             <div class='coverDocRef' contenteditable='true' data-sync='doc-ref'>{_escape(document_ref_default)}</div>
           </div>
-          <div class='coverSquare'>
-            {("<img class='coverSquareLogo' src='" + logo_eiffage_square + "' alt='EIFFAGE' />") if logo_eiffage_square else ""}
-          </div>
         </div>
-        <div class='coverTitleBlock'>
-          <div class='coverTitle' contenteditable='true'>- Compte Rendu -</div>
-          <div class='coverSubtitle' contenteditable='true'>{_escape(project)}</div>
+
+        <div class='coverPresence'>
+          {presence_block_html}
+        </div>
+
+        <div class='nextMeetingBox'>
+          <div class='nextMeetingLine1'>Prochaine réunion</div>
+          <div class='nextMeetingLine3' contenteditable='true'>{_escape(next_meeting_default)}</div>
         </div>
       </div>
     """
@@ -3618,7 +3637,6 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
           <div class="reportTables">
             {report_header_html}
             <div class="reportBlocks">
-              {presence_block_html}
               {zones_html}
               {annexes_html}
               {report_note_html}
