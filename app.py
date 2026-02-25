@@ -124,7 +124,7 @@ CONTENT_PATH = os.getenv(
 )
 DEFAULT_MZA_COVER_IMAGE_PATH = os.getenv(
     "METRONOME_MZA_COVER_IMAGE",
-    r"C:\tempo-cr\assets\MZA.png",
+    r"\\192.168.10.100\02 - affaires\02.2 - SYNTHESE\ZZ - METRONOME\Content\MZA.png",
 )
 
 # -------------------------
@@ -3210,19 +3210,19 @@ body.printPreviewMode .noPrintRow{{display:none!important}}
 .coverProjectImage{{max-width:130px;max-height:130px;object-fit:contain;display:block}}
 .coverProjectImageFallback{{width:120px;height:120px;border:1px solid #d1d5db;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:900;color:#64748b}}
 .coverProjectMeta{{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px}}
-.coverProjectLabel{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:34px;font-weight:900;line-height:1;color:#0b2a52}}
-.coverProjectTitle{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:24px;font-weight:700;color:#111;line-height:1.12}}
-.coverProjectNumber{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:32px;font-weight:800;color:#111;line-height:1}}
-.coverProjectDate{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:26px;font-weight:700;color:#111;line-height:1}}
-.coverDocRef{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:16px;font-weight:700;color:#233a57;max-width:100%}}
+.coverProjectLabel{{font-family:Arial,sans-serif;font-size:14px;font-weight:700;line-height:1.2;color:#111}}
+.coverProjectTitle{{font-family:Arial,sans-serif;font-size:14px;font-weight:700;color:#111;line-height:1.2}}
+.coverProjectNumber{{font-family:Arial,sans-serif;font-size:14px;font-weight:700;color:#111;line-height:1.2}}
+.coverProjectDate{{font-family:Arial,sans-serif;font-size:14px;font-weight:700;color:#111;line-height:1.2}}
+.coverDocRef{{font-family:Arial,sans-serif;font-size:14px;font-weight:700;color:#111;max-width:100%}}
 .editInline{{display:inline-block;min-width:40px;padding:0 4px;border-bottom:2px dashed #cbd5e1;outline:none}}
-.coverInlineWide{{min-width:130px}}
-.coverInlineDate{{min-width:120px}}
+.coverInlineWide{{min-width:90px}}
+.coverInlineDate{{min-width:90px}}
 @media print{{.editInline{{border-bottom:none}}}}
-.nextMeetingBox{{margin:6mm auto 0 auto;max-width:180mm;border:2px solid #111;padding:10px 8px;font-weight:1000;text-align:center}}
-.nextMeetingLine1{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:34px;font-weight:900;text-transform:uppercase}}
-.nextMeetingLine3{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:28px;color:#111;margin-top:4px;outline:none}}
-@media print{{.coverProjectLabel{{font-size:30px}} .coverProjectTitle{{font-size:22px}} .coverProjectNumber{{font-size:28px}} .coverProjectDate{{font-size:24px}} .nextMeetingLine1{{font-size:28px}} .nextMeetingLine3{{font-size:24px}}}}
+.nextMeetingBox{{margin:6mm 0 0 0;width:100%;max-width:none;border:2px solid #111;padding:10px 8px;text-align:center}}
+.nextMeetingLine1{{font-family:Arial,sans-serif;font-size:16px;font-weight:700;text-transform:uppercase}}
+.nextMeetingLine3{{font-family:Arial,sans-serif;font-size:16px;color:#111;margin-top:4px;outline:none;font-weight:700}}
+@media print{{.coverProjectLabel{{font-size:14px}} .coverProjectTitle{{font-size:14px}} .coverProjectNumber{{font-size:14px}} .coverProjectDate{{font-size:14px}} .nextMeetingLine1{{font-size:16px}} .nextMeetingLine3{{font-size:16px}}}}
 
 /* PROJECT BANNER */
 .banner{{
@@ -3595,21 +3595,13 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
 <body class="{'pdf' if print_mode else ''}">
   {actions_html}
   <div class="wrap">
-    <section class="page page--cover">
-      <div class="pageContent">
-        <div class="coverBlock">
-          {cover_html}
-          {top_html}
-        </div>
-      </div>
-    </section>
-
     <div class="reportPages">
       <section class="page page--report">
         <div class="pageContent">
           <div class="reportTables">
             {report_header_html}
             <div class="reportBlocks">
+              <div class="coverBlock reportBlock">{cover_html}{top_html}</div>
               {presence_block_html}
               {next_meeting_html}
               {zones_html}
