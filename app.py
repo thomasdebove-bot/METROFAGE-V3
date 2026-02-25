@@ -124,7 +124,7 @@ CONTENT_PATH = os.getenv(
 )
 DEFAULT_MZA_COVER_IMAGE_PATH = os.getenv(
     "METRONOME_MZA_COVER_IMAGE",
-    r"\\192.168.10.100\02 - affaires\02.2 - SYNTHESE\ZZ - METRONOME\Content\MZA.png",
+    r"C:\tempo-cr\assets\MZA.png",
 )
 
 # -------------------------
@@ -3203,7 +3203,7 @@ body.printPreviewMode .noPrintRow{{display:none!important}}
 .coverBlock{{margin-bottom:6mm;}}
 .coverPresence{{margin-top:4mm}}
 .coverHeaderLogo{{display:flex;justify-content:flex-start;align-items:flex-start;margin-bottom:10mm}}
-.coverLogo{{height:64px;width:auto;display:block}}
+.coverLogo{{height:86px;width:auto;display:block}}
 .coverFooterMark{{height:16px;width:auto;display:block}}
 .coverProjectCard{{border:2px solid #111;display:grid;grid-template-columns:150px 1fr;gap:18px;padding:12px 14px;align-items:center;max-width:180mm;margin:0 auto}}
 .coverProjectImageWrap{{display:flex;align-items:center;justify-content:center;min-height:128px}}
@@ -3496,7 +3496,6 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
     next_meeting_default = ((meet_date or ref_date) + timedelta(days=14)).strftime("%d/%m/%Y")
     project_image_src = _img_src_from_ref(proj_img) or _img_src_from_ref(DEFAULT_MZA_COVER_IMAGE_PATH)
 
-    document_ref_default = f"{project}_CR_{cr_date_txt.replace('/', '')}"
     cover_html = f"""
       <div class='coverLayout'>
         <div class='coverHeaderLogo'>
@@ -3515,26 +3514,19 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
             </div>
             <div class='coverProjectNumber'>N°<span contenteditable='true' class='editInline' data-sync='cr-number'>{_escape(cr_number_default)}</span></div>
             <div class='coverProjectDate'><span contenteditable='true' class='editInline coverInlineDate'>{_escape(cr_date_txt)}</span></div>
-            <div class='coverDocRef' contenteditable='true' data-sync='doc-ref'>{_escape(document_ref_default)}</div>
           </div>
         </div>
-
-        <div class='coverPresence'>
-          {presence_block_html}
-        </div>
-
-        <div class='nextMeetingBox'>
-          <div class='nextMeetingLine1'>Prochaine réunion</div>
-          <div class='nextMeetingLine3' contenteditable='true'>{_escape(next_meeting_default)}</div>
-        </div>
       </div>
     """
 
-    report_header_html = f"""
-      <div class='reportHeader printHeaderFixed'>
-        {_escape(project)} <span class='accent'>— Compte Rendu</span> n°<span contenteditable='true' class='editInline' data-sync='cr-number'>{_escape(cr_number_default)}</span> — Réunion de Synthèse du {_escape(cr_date_txt)}
+    next_meeting_html = f"""
+      <div class='nextMeetingBox reportBlock'>
+        <div class='nextMeetingLine1'>Prochaine réunion</div>
+        <div class='nextMeetingLine3' contenteditable='true'>{_escape(next_meeting_default)}</div>
       </div>
     """
+
+    report_header_html = ""
 
     top_html = ""
     annexes_html = ""
@@ -3618,6 +3610,8 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
           <div class="reportTables">
             {report_header_html}
             <div class="reportBlocks">
+              {presence_block_html}
+              {next_meeting_html}
               {zones_html}
               {annexes_html}
               {report_note_html}
