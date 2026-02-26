@@ -3240,7 +3240,9 @@ body.printPreviewMode .noPrintRow{{display:none!important}}
 .nextMeetingBox{{margin:2mm 0 0 0;width:100%;max-width:none;border:2px solid #111;padding:10px 8px;text-align:center;break-inside:avoid;page-break-inside:avoid}}
 .nextMeetingLine1{{font-family:Arial,sans-serif;font-size:16px;font-weight:700;text-transform:uppercase}}
 .nextMeetingLine3{{font-family:Arial,sans-serif;font-size:16px;color:#111;margin-top:4px;outline:none;font-weight:700}}
-@media print{{.coverProjectLabel{{font-size:14px}} .coverProjectTitle{{font-size:14px}} .coverProjectNumber{{font-size:14px}} .coverProjectDate{{font-size:14px}} .nextMeetingLine1{{font-size:16px}} .nextMeetingLine3{{font-size:16px}}}}
+.editableDateHint{{display:inline-block;min-width:90px;padding:0 6px;border-bottom:2px dotted #111;letter-spacing:.5px}}
+.editableDateHint:empty::before{{content:attr(data-placeholder);color:#94a3b8;font-weight:600;letter-spacing:1px}}
+@media print{{.coverProjectLabel{{font-size:14px}} .coverProjectTitle{{font-size:14px}} .coverProjectNumber{{font-size:14px}} .coverProjectDate{{font-size:14px}} .nextMeetingLine1{{font-size:16px}} .nextMeetingLine3{{font-size:16px}} .editableDateHint{{border-bottom:1px dotted #111}}}}
 
 /* PROJECT BANNER */
 .banner{{
@@ -3284,7 +3286,7 @@ body.printPreviewMode .noPrintRow{{display:none!important}}
 }}
 .zoneTitle{{
   display:flex;align-items:center;gap:10px;
-  padding:6px 10px;border:1px solid var(--border);border-bottom:none;
+  padding:6px 10px;border:2px solid #111;border-bottom:none;
   background:var(--brand-red);color:#111;font-weight:900;font-size:11px;text-transform:uppercase;
 }}
 .zoneTitle button{{margin-left:auto}}
@@ -3386,6 +3388,7 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
 .crTable tr{{page-break-inside:auto;break-inside:auto;}}
 .annexTable tr{{page-break-inside:auto;break-inside:auto;}}
 .crTable th{{background:var(--brand-red);color:#111;text-align:center;font-weight:900;font-size:11px;line-height:1.2;white-space:nowrap;border-color:#111}}
+.zoneBlock .crTable thead th{{border:2px solid #111!important}}
 .crTable td{{font-size:11px;line-height:1.24;word-break:normal;overflow-wrap:break-word;hyphens:none}}
 .crTable td.colDate, .crTable th.colDate{{padding:6px 4px}}
 
@@ -3542,7 +3545,7 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
               <span contenteditable='true' class='editInline coverInlineWide'>Équipe C&amp;C</span>
             </div>
             <div class='coverProjectNumber'>N°<span contenteditable='true' class='editInline' data-sync='cr-number'>{_escape(cr_number_default)}</span></div>
-            <div class='coverProjectDate'><span contenteditable='true' class='editInline coverInlineDate'>{_escape(cr_date_txt)}</span></div>
+            <div class='coverProjectDate'><span contenteditable='true' class='editInline coverInlineDate editableDateHint' data-placeholder='.. / .. / ....'>{_escape(cr_date_txt)}</span></div>
           </div>
         </div>
       </div>
@@ -3551,7 +3554,7 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
     next_meeting_html = f"""
       <div class='nextMeetingBox reportBlock'>
         <div class='nextMeetingLine1'>Prochaine réunion</div>
-        <div class='nextMeetingLine3' contenteditable='true'>{_escape(next_meeting_default)}</div>
+        <div class='nextMeetingLine3 editableDateHint' contenteditable='true' data-placeholder='.. / .. / ....'>{_escape(next_meeting_default)}</div>
       </div>
     """
 
