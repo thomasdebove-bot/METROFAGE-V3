@@ -3154,8 +3154,8 @@ def render_cr(
   --border:#e2e8f0;
   --soft:#f8fafc;
   --shadow:0 10px 30px rgba(2,6,23,.06);
-  --accent:#ff0000;
-  --brand-red:#ff0000;
+  --accent:#ff9999;
+  --brand-red:#ff9999;
   --blueSoft:#eff6ff;
   --blueBorder:#bfdbfe;
   --col-type:7%;
@@ -3205,7 +3205,7 @@ body.printPreviewMode .noPrintRow{{display:none!important}}
 .coverHeaderLogo{{display:flex;justify-content:flex-start;align-items:flex-start;margin-bottom:10mm}}
 .coverLogo{{height:86px;width:auto;display:block}}
 .coverFooterMark{{height:16px;width:auto;display:block}}
-.coverProjectCard{{border:2px solid #111;display:grid;grid-template-columns:150px 1fr;gap:18px;padding:12px 14px;align-items:center;max-width:180mm;margin:0 auto}}
+.coverProjectCard{{border:2px solid #111;display:grid;grid-template-columns:150px 1fr;gap:18px;padding:12px 14px;align-items:center;width:100%;max-width:none;margin:0}}
 .coverProjectImageWrap{{display:flex;align-items:center;justify-content:center;min-height:128px}}
 .coverProjectImage{{max-width:130px;max-height:130px;object-fit:contain;display:block}}
 .coverProjectImageFallback{{width:120px;height:120px;border:1px solid #d1d5db;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:900;color:#64748b}}
@@ -3273,7 +3273,7 @@ body.printPreviewMode .noPrintRow{{display:none!important}}
 .zoneTools{{display:flex;align-items:center;gap:6px;margin-left:auto}}
 .zoneBtn{{border:1px solid #ffffff;background:#fff;border-radius:8px;padding:4px 8px;font-weight:800;cursor:pointer}}
 .zoneBlock.highlight{{box-shadow:0 0 0 2px var(--brand-red) inset; background:linear-gradient(180deg,#fff7ed,#fff)}}
-.zoneBlock.zone-black .zoneTitle{{background:#111;color:#fff}}
+.zoneBlock.zone-black .zoneTitle{{background:var(--brand-red);color:#fff}}
 .zoneBlock.zone-black .zoneBtn{{border-color:#111;color:#111;background:#fff}}
 .zoneBlock.pageBreakBefore{{page-break-before:always}}
 .u-page-break{{break-before:page;page-break-before:always;}}
@@ -3367,7 +3367,7 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
 .crTable th, .crTable td{{border:1px solid var(--border);padding:6px 7px;vertical-align:top;page-break-inside:auto;break-inside:auto;}}
 .crTable tr{{page-break-inside:auto;break-inside:auto;}}
 .annexTable tr{{page-break-inside:auto;break-inside:auto;}}
-.crTable th{{background:#e5e7eb;color:#111;text-align:center;font-weight:900;font-size:11px;line-height:1.2;white-space:nowrap}}
+.crTable th{{background:var(--brand-red);color:#111;text-align:center;font-weight:900;font-size:11px;line-height:1.2;white-space:nowrap}}
 .crTable td{{font-size:11px;line-height:1.24;word-break:normal;overflow-wrap:break-word;hyphens:none}}
 .crTable td.colDate, .crTable th.colDate{{padding:6px 4px}}
 
@@ -3604,6 +3604,7 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
               <div class="coverBlock reportBlock">{cover_html}{top_html}</div>
               {presence_block_html}
               {next_meeting_html}
+              <div class="u-page-break"></div>
               {zones_html}
               {annexes_html}
               {report_note_html}
