@@ -1926,10 +1926,20 @@ DRAGGABLE_IMAGES_JS = r"""
   function setupImageButtons(){
     document.querySelectorAll('.colComment').forEach(cell => {
       const btn = cell.querySelector('.btnAddImage');
+      const btnComment = cell.querySelector('.btnAddComment');
       const input = cell.querySelector('.imageInput');
       if(!btn || !input || btn.dataset.ready === '1') return;
       btn.dataset.ready = '1';
       btn.addEventListener('click', () => input.click());
+      if(btnComment && btnComment.dataset.ready !== '1'){
+        btnComment.dataset.ready = '1';
+        btnComment.addEventListener('click', () => {
+          const block = document.createElement('div');
+          block.className = 'entryComment';
+          block.innerHTML = "<div class='metaVal' contenteditable='true'>Auteur • Société • Date</div><div style='margin-top:6px' contenteditable='true'>Commentaire…</div>";
+          cell.appendChild(block);
+        });
+      }
       input.addEventListener('change', (e) => {
         const files = Array.from(e.target.files || []).filter(f => f.type.startsWith('image/'));
         if(!files.length) return;
@@ -2106,9 +2116,7 @@ PAGINATION_JS = r"""
     const blocks = Array.from(container.querySelectorAll('.reportBlock')).map(block => {
       const splitData = block.classList.contains('zoneBlock')
         ? getZoneSplitData(block)
-        : (block.classList.contains('presenceBlock')
-            ? getTableSplitData(block, 'table.presenceUsersTable')
-            : null);
+        : null;
       return {
         node: block,
         height: block.getBoundingClientRect().height || block.offsetHeight || 0,
@@ -2356,7 +2364,7 @@ body{{margin:0;background:#fff;color:var(--text);font:14px/1.45 system-ui,-apple
 @media(max-width:780px){{.grid{{grid-template-columns:1fr}}}}
 label{{display:block;font-weight:900;margin:0 0 6px}}
 select{{width:100%;padding:12px 12px;border-radius:12px;border:1px solid var(--border);background:#fff;font-weight:700}}
-.btn{{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:11px 14px;border-radius:12px;border:1px solid var(--border);background:var(--accent);color:#fff;font-weight:950;cursor:pointer;text-decoration:none}}
+.btn{{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:11px 14px;border-radius:12px;border:1px solid var(--border);background:#ff9999;color:#111;font-weight:950;cursor:pointer;text-decoration:none}}
 .btn.secondary{{background:#fff;color:var(--text);font-weight:900}}
 .hint{{color:var(--muted);margin-top:10px;font-weight:700}}
 </style>
@@ -2915,7 +2923,7 @@ def render_cr(
           <tr class="{row_cls} compactRow" data-row-id="{safe_row_id}" data-entry-type="{"task" if is_task else "memo"}">
             <td class="colType">{toggle_html}<div>{tag_html or "—"}</div></td>
             <td class="colComment">
-              <div class="rowImageTools noPrint"><button type="button" class="btnAddImage">+ Image</button><input type="file" class="imageInput" accept="image/*" multiple hidden /></div>
+              <div class="rowImageTools noPrint"><button type="button" class="btnAddImage">+ Image</button><button type="button" class="btnAddComment">+ Commentaire</button><input type="file" class="imageInput" accept="image/*" multiple hidden /></div>
               <div class="commentText">{title}</div>
               {thumbs}
               {render_entry_comment(r)}
@@ -3154,7 +3162,7 @@ def render_cr(
   --border:#e2e8f0;
   --soft:#f8fafc;
   --shadow:0 10px 30px rgba(2,6,23,.06);
-  --accent:#f7c7ac;
+  --accent:#ff9999;
   --brand-red:#f7c7ac;
   --blueSoft:#eff6ff;
   --blueBorder:#bfdbfe;
@@ -3267,13 +3275,13 @@ body.printPreviewMode .noPrintRow{{display:none!important}}
 .zoneTitle{{
   display:flex;align-items:center;gap:10px;
   padding:6px 10px;border:1px solid var(--border);border-bottom:none;
-  background:#111;color:#ffffff;font-weight:900;font-size:11px;text-transform:uppercase;
+  background:var(--brand-red);color:#111;font-weight:900;font-size:11px;text-transform:uppercase;
 }}
 .zoneTitle button{{margin-left:auto}}
 .zoneTools{{display:flex;align-items:center;gap:6px;margin-left:auto}}
 .zoneBtn{{border:1px solid #ffffff;background:#fff;border-radius:8px;padding:4px 8px;font-weight:800;cursor:pointer}}
 .zoneBlock.highlight{{box-shadow:0 0 0 2px var(--brand-red) inset; background:linear-gradient(180deg,#fff7ed,#fff)}}
-.zoneBlock.zone-black .zoneTitle{{background:var(--brand-red);color:#111}}
+.zoneBlock.zone-black .zoneTitle{{background:#111;color:#fff}}
 .zoneBlock.zone-black .zoneBtn{{border-color:#111;color:#111;background:#fff}}
 .zoneBlock.pageBreakBefore{{page-break-before:always}}
 .u-page-break{{break-before:page;page-break-before:always;}}
@@ -3311,7 +3319,7 @@ body.printPreviewMode .noPrintRow{{display:none!important}}
 
 .actions{{position:fixed;top:14px;left:14px;z-index:9999;display:flex;flex-direction:column;gap:8px;width:248px;padding:10px;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,.97);box-shadow:0 8px 24px rgba(2,6,23,.12)}}
 .actions .btn,.actions .hiddenRowsSelect{{width:100%}}
-.btn{{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:11px 14px;border-radius:12px;border:1px solid var(--border);background:var(--accent);color:#fff;font-weight:950;cursor:pointer;text-decoration:none}}
+.btn{{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:11px 14px;border-radius:12px;border:1px solid var(--border);background:#ff9999;color:#111;font-weight:950;cursor:pointer;text-decoration:none}}
 .btn.secondary{{background:#fff;color:var(--text);font-weight:900}}
 #btnPrintPreview.active{{background:#0f172a;color:#fff;border-color:#0f172a}}
 .rangePanel{{position:fixed;top:14px;left:14px;z-index:10001;width:248px;border:1px solid var(--border);border-radius:14px;padding:12px;background:#fff;display:flex;flex-direction:column;gap:10px;box-shadow:0 8px 24px rgba(2,6,23,.12);max-height:calc(100vh - 32px);overflow:auto}}
@@ -3380,6 +3388,8 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
 .rowImageTools{{display:flex;justify-content:flex-end;margin-bottom:4px}}
 .btnAddImage{{border:1px solid #d1d5db;background:#fff;border-radius:8px;padding:2px 8px;font-size:11px;font-weight:800;cursor:pointer}}
 .btnAddImage:hover{{background:#f8fafc}}
+.btnAddComment{{border:1px solid #d1d5db;background:#fff;border-radius:8px;padding:2px 8px;font-size:11px;font-weight:800;cursor:pointer;margin-left:6px}}
+.btnAddComment:hover{{background:#f8fafc}}
 .colDate{{text-align:center;font-variant-numeric: tabular-nums;white-space:nowrap;position:relative}}
 .colLot{{text-align:center;white-space:nowrap;position:relative}}
 .colWho{{text-align:center;white-space:nowrap;position:relative}}
@@ -3454,7 +3464,7 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
 .presenceTable .presenceLine{{display:flex;align-items:center;gap:8px;font-weight:700}}
 .presenceBlock{{margin:2mm 0 0 0;}}
 .presenceUsersTable th{{text-align:left}}
-.presenceUsersTable th{{background:var(--brand-red)!important;color:#111!important;border-color:#111!important}}
+.presenceUsersTable th{{background:#ff9999!important;color:#111!important;border-color:#111!important}}
 .presenceUsersTable th:nth-child(4),
 .presenceUsersTable th:nth-child(5),
 .presenceUsersTable th:nth-child(6),
@@ -3462,6 +3472,7 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
 .presenceUsersTable td:nth-child(5),
 .presenceUsersTable td:nth-child(6){{text-align:center}}
 .presenceUsersTable td{{vertical-align:middle}}
+.presenceUsersTable th,.presenceUsersTable td{{font-size:11px;padding:4px 6px}}
 .presenceUsersTable .presenceFlag{{min-height:18px}}
 .presenceName{{display:inline-flex;align-items:center;gap:6px}}
 .presenceUsersTable th{{position:relative;padding-right:18px}}
@@ -3484,6 +3495,9 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
   .presenceUsersTable thead{{display:table-header-group}}
   .presenceUsersTable tr{{break-inside:avoid;page-break-inside:avoid}}
 }}
+
+.reportPages > .page--report:first-child .reportBlocks{{min-height:255mm}}
+.reportPages > .page--report:first-child .nextMeetingBox{{margin-top:auto}}
 
 {EDITOR_MEMO_MODAL_CSS}
 {QUALITY_MODAL_CSS}
