@@ -859,6 +859,7 @@ def render_entry_comment(r) -> str:
     meta = " • ".join([x for x in [author, company, d] if x])
     return f"""
       <div class="entryComment">
+        <button type="button" class="entryCommentRemove noPrint" title="Supprimer le commentaire" aria-label="Supprimer le commentaire">×</button>
         <div class="metaVal">{meta or "—"}</div>
         <div style="margin-top:6px">{body}</div>
       </div>
@@ -1936,8 +1937,17 @@ DRAGGABLE_IMAGES_JS = r"""
         btnComment.addEventListener('click', () => {
           const block = document.createElement('div');
           block.className = 'entryComment';
-          block.innerHTML = "<div class='metaVal' contenteditable='true'>Auteur • Société • Date</div><div style='margin-top:6px' contenteditable='true'>Commentaire…</div>";
+          block.innerHTML = "<button type='button' class='entryCommentRemove noPrint' title='Supprimer le commentaire' aria-label='Supprimer le commentaire'>×</button><div class='metaVal' contenteditable='true'>Auteur • Société • Date</div><div style='margin-top:6px' contenteditable='true'>Commentaire…</div>";
           cell.appendChild(block);
+        });
+      }
+      if(cell.dataset.commentRemoveReady !== '1'){
+        cell.dataset.commentRemoveReady = '1';
+        cell.addEventListener('click', (e) => {
+          const removeBtn = e.target.closest('.entryCommentRemove');
+          if(!removeBtn) return;
+          const comment = removeBtn.closest('.entryComment');
+          if(comment){ comment.remove(); }
         });
       }
       input.addEventListener('change', (e) => {
@@ -3402,7 +3412,7 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
 .crTable tr.rowDoneRecent td.colType div{{color:#15803d;font-weight:900;}}
 .rowHidden{{display:none!important}}
 .colGrip{{position:absolute;top:0;right:-6px;width:12px;height:100%;cursor:col-resize}}
-.colGrip::after{{content:"";position:absolute;top:3px;bottom:3px;left:5px;width:2px;background:#cbd5f5;border-radius:2px;opacity:.7}}
+.colGrip::after{{content:"";position:absolute;top:3px;bottom:3px;left:5px;width:2px;background:#111;border-radius:2px;opacity:.9}}
 
 @media print{{ .rowToggle{{display:none}} .noPrintRow{{display:none}} .editableCell{{background:transparent}} .rowImageTools{{display:none!important}} .thumbRemove{{display:none!important}} }}
 @media print{{ .sessionSubRow{{break-inside:avoid;page-break-inside:avoid}} .zoneTitle{{break-after:avoid-page;page-break-after:avoid}} }}
@@ -3414,6 +3424,9 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
 .thumbs{{margin-top:6px;display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start}}
 .thumb{{width:160px;height:auto;max-width:100%;border:1px solid var(--border);border-radius:8px;display:block;object-fit:cover;background:#fff}}
 .entryComment{{margin-top:8px;padding-left:12px;border-left:3px solid #e2e8f0}}
+.entryComment{{position:relative;padding-right:26px}}
+.entryCommentRemove{{position:absolute;top:0;right:0;width:20px;height:20px;border:1px solid #d1d5db;border-radius:999px;background:#fff;color:#111;font-size:14px;line-height:18px;font-weight:900;cursor:pointer}}
+.entryCommentRemove:hover{{background:#fee2e2;border-color:#ef4444;color:#991b1b}}
 .tagReminderGreen{{color:#16a34a;font-weight:900}}
 .thumbA{{display:inline-flex;cursor:grab}}
 .commentText{{font-weight:400;line-height:1.24;white-space:normal}}
