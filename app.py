@@ -3242,7 +3242,7 @@ body.printPreviewMode .noPrintRow{{display:none!important}}
 .nextMeetingLine3{{font-family:Arial,sans-serif;font-size:16px;color:#111;margin-top:4px;outline:none;font-weight:700}}
 .editableDateHint{{display:inline-block;min-width:90px;padding:0 6px;border-bottom:2px dotted #111;letter-spacing:.5px}}
 .editableDateHint:empty::before{{content:attr(data-placeholder);color:#94a3b8;font-weight:600;letter-spacing:1px}}
-@media print{{.coverProjectLabel{{font-size:14px}} .coverProjectTitle{{font-size:14px}} .coverProjectNumber{{font-size:14px}} .coverProjectDate{{font-size:14px}} .nextMeetingLine1{{font-size:16px}} .nextMeetingLine3{{font-size:16px}} .editableDateHint{{border-bottom:1px dotted #111}}}}
+@media print{{.coverProjectLabel{{font-size:14px}} .coverProjectTitle{{font-size:14px}} .coverProjectNumber{{font-size:14px}} .coverProjectDate{{font-size:14px}} .nextMeetingLine1{{font-size:16px}} .nextMeetingLine3{{font-size:16px}} .editableDateHint{{border-bottom:none}}}}
 
 /* PROJECT BANNER */
 .banner{{
@@ -3286,7 +3286,7 @@ body.printPreviewMode .noPrintRow{{display:none!important}}
 }}
 .zoneTitle{{
   display:flex;align-items:center;gap:10px;
-  padding:6px 10px;border:2px solid #111;border-bottom:none;
+  padding:6px 10px;border:1px solid #111;border-bottom:none;
   background:var(--brand-red);color:#111;font-weight:900;font-size:11px;text-transform:uppercase;
 }}
 .zoneTitle button{{margin-left:auto}}
@@ -3388,7 +3388,7 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
 .crTable tr{{page-break-inside:auto;break-inside:auto;}}
 .annexTable tr{{page-break-inside:auto;break-inside:auto;}}
 .crTable th{{background:var(--brand-red);color:#111;text-align:center;font-weight:900;font-size:11px;line-height:1.2;white-space:nowrap;border-color:#111}}
-.zoneBlock .crTable thead th{{border:2px solid #111!important}}
+.zoneBlock .crTable thead th{{border:1px solid #111!important}}
 .crTable td{{font-size:11px;line-height:1.24;word-break:normal;overflow-wrap:break-word;hyphens:none}}
 .crTable td.colDate, .crTable th.colDate{{padding:6px 4px}}
 
