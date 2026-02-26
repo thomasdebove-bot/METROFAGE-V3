@@ -2725,9 +2725,9 @@ def render_cr(
               <th>Prénom et Nom <span class="presenceGrip" data-col="0"></span></th>
               <th>Lot <span class="presenceGrip" data-col="1"></span></th>
               <th>Mail <span class="presenceGrip" data-col="2"></span></th>
-              <th>C <span class="presenceGrip" data-col="3"></span></th>
-              <th>P <span class="presenceGrip" data-col="4"></span></th>
-              <th>D <span class="presenceGrip" data-col="5"></span></th>
+              <th>P <span class="presenceGrip" data-col="3"></span></th>
+              <th>D <span class="presenceGrip" data-col="4"></span></th>
+              <th>C <span class="presenceGrip" data-col="5"></span></th>
             </tr>
           </thead>
           <tbody>
@@ -2921,10 +2921,10 @@ def render_cr(
               {render_entry_comment(r)}
             </td>
             <td class="colDate">{created or "—"}</td>
+            <td class="colWho editableCell" contenteditable="true">{concerne_display}</td>
+            <td class="colLot editableCell" contenteditable="true">{lot_display}</td>
             <td class="colDate">{deadline_display}</td>
             <td class="colDate">{done_display}</td>
-            <td class="colLot editableCell" contenteditable="true">{lot_display}</td>
-            <td class="colWho editableCell" contenteditable="true">{concerne_display}</td>
           </tr>
         """
 
@@ -2967,20 +2967,20 @@ def render_cr(
               <col style="width:var(--col-type)" />
               <col style="width:var(--col-comment)" />
               <col style="width:var(--col-date)" />
-              <col style="width:var(--col-date)" />
-              <col style="width:var(--col-date)" />
-              <col style="width:var(--col-lot)" />
               <col style="width:var(--col-who)" />
+              <col style="width:var(--col-lot)" />
+              <col style="width:var(--col-date)" />
+              <col style="width:var(--col-date)" />
             </colgroup>
             <thead>
               <tr>
                 <th class="colType">Type <span class="colGrip" data-col="type"></span></th>
                 <th class="colComment">Commentaires et observations <span class="colGrip" data-col="comment"></span></th>
                 <th class="colDate">Écrit le <span class="colGrip" data-col="date"></span></th>
+                <th class="colWho">Concerne <span class="colGrip" data-col="who"></span></th>
+                <th class="colLot">Lot <span class="colGrip" data-col="lot"></span></th>
                 <th class="colDate">Pour le <span class="colGrip" data-col="date2"></span></th>
                 <th class="colDate">Fait le <span class="colGrip" data-col="date3"></span></th>
-                <th class="colLot">Lot <span class="colGrip" data-col="lot"></span></th>
-                <th class="colWho">Concerne <span class="colGrip" data-col="who"></span></th>
               </tr>
             </thead>
             <tbody>
@@ -3154,8 +3154,8 @@ def render_cr(
   --border:#e2e8f0;
   --soft:#f8fafc;
   --shadow:0 10px 30px rgba(2,6,23,.06);
-  --accent:#ff9999;
-  --brand-red:#ff9999;
+  --accent:#f7c7ac;
+  --brand-red:#f7c7ac;
   --blueSoft:#eff6ff;
   --blueBorder:#bfdbfe;
   --col-type:7%;
@@ -3175,8 +3175,8 @@ body{{padding:14px 14px 14px 280px;}}
 .wrap{{display:flex;flex-direction:column;gap:12px;align-items:center;}}
 .page{{width:210mm;height:297mm;min-height:297mm;position:relative;background:#fff;overflow:visible;break-after:page;page-break-after:always;}}
 .page:last-child{{break-after:auto;page-break-after:auto;}}
-.pageContent{{padding:10mm 8mm 10mm 8mm;}}
-.page--cover .pageContent{{padding:10mm 8mm 10mm 8mm;}}
+.pageContent{{padding:6mm 8mm 6mm 8mm;}}
+.page--cover .pageContent{{padding:6mm 8mm 6mm 8mm;}}
 .muted{{color:var(--muted)}}
 .small{{font-size:12px}}
 .noPrint{{}}
@@ -3219,7 +3219,7 @@ body.printPreviewMode .noPrintRow{{display:none!important}}
 .coverInlineWide{{min-width:90px}}
 .coverInlineDate{{min-width:90px}}
 @media print{{.editInline{{border-bottom:none}}}}
-.nextMeetingBox{{margin:6mm 0 0 0;width:100%;max-width:none;border:2px solid #111;padding:10px 8px;text-align:center}}
+.nextMeetingBox{{margin:2mm 0 0 0;width:100%;max-width:none;border:2px solid #111;padding:10px 8px;text-align:center;break-inside:avoid;page-break-inside:avoid}}
 .nextMeetingLine1{{font-family:Arial,sans-serif;font-size:16px;font-weight:700;text-transform:uppercase}}
 .nextMeetingLine3{{font-family:Arial,sans-serif;font-size:16px;color:#111;margin-top:4px;outline:none;font-weight:700}}
 @media print{{.coverProjectLabel{{font-size:14px}} .coverProjectTitle{{font-size:14px}} .coverProjectNumber{{font-size:14px}} .coverProjectDate{{font-size:14px}} .nextMeetingLine1{{font-size:16px}} .nextMeetingLine3{{font-size:16px}}}}
@@ -3267,13 +3267,13 @@ body.printPreviewMode .noPrintRow{{display:none!important}}
 .zoneTitle{{
   display:flex;align-items:center;gap:10px;
   padding:6px 10px;border:1px solid var(--border);border-bottom:none;
-  background:var(--brand-red);color:#ffffff;font-weight:900;font-size:11px;text-transform:uppercase;
+  background:#111;color:#ffffff;font-weight:900;font-size:11px;text-transform:uppercase;
 }}
 .zoneTitle button{{margin-left:auto}}
 .zoneTools{{display:flex;align-items:center;gap:6px;margin-left:auto}}
 .zoneBtn{{border:1px solid #ffffff;background:#fff;border-radius:8px;padding:4px 8px;font-weight:800;cursor:pointer}}
 .zoneBlock.highlight{{box-shadow:0 0 0 2px var(--brand-red) inset; background:linear-gradient(180deg,#fff7ed,#fff)}}
-.zoneBlock.zone-black .zoneTitle{{background:var(--brand-red);color:#fff}}
+.zoneBlock.zone-black .zoneTitle{{background:var(--brand-red);color:#111}}
 .zoneBlock.zone-black .zoneBtn{{border-color:#111;color:#111;background:#fff}}
 .zoneBlock.pageBreakBefore{{page-break-before:always}}
 .u-page-break{{break-before:page;page-break-before:always;}}
@@ -3367,7 +3367,7 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
 .crTable th, .crTable td{{border:1px solid var(--border);padding:6px 7px;vertical-align:top;page-break-inside:auto;break-inside:auto;}}
 .crTable tr{{page-break-inside:auto;break-inside:auto;}}
 .annexTable tr{{page-break-inside:auto;break-inside:auto;}}
-.crTable th{{background:var(--brand-red);color:#111;text-align:center;font-weight:900;font-size:11px;line-height:1.2;white-space:nowrap}}
+.crTable th{{background:var(--brand-red);color:#111;text-align:center;font-weight:900;font-size:11px;line-height:1.2;white-space:nowrap;border-color:#111}}
 .crTable td{{font-size:11px;line-height:1.24;word-break:normal;overflow-wrap:break-word;hyphens:none}}
 .crTable td.colDate, .crTable th.colDate{{padding:6px 4px}}
 
@@ -3436,6 +3436,7 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
 .annexTable td:last-child{{text-align:right}}
 .annexTable td:last-child .annexLink{{display:inline-block;text-align:right}}
 .annexTable th{{font-weight:900;background:var(--brand-red);color:#fff}}
+.annexTable th{{border-color:#111}}
 .annexTable .annexLink{{color:var(--brand-red);font-weight:800;text-decoration:underline;text-underline-offset:3px;cursor:pointer}}
 .annexTable .annexLink::after{{content:" ↗";font-weight:900;color:var(--brand-red)}}
 .annexTable tr:last-child td{{border-bottom:none}}
@@ -3451,8 +3452,9 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
 .reportHeader .accent{{color:#ff0000;font-weight:900}}
 .presenceTable .presenceList{{margin:0;padding-left:0;list-style:none;display:flex;flex-direction:column;gap:6px}}
 .presenceTable .presenceLine{{display:flex;align-items:center;gap:8px;font-weight:700}}
-.presenceBlock{{margin:8mm 0 6mm 0;}}
+.presenceBlock{{margin:2mm 0 0 0;}}
 .presenceUsersTable th{{text-align:left}}
+.presenceUsersTable th{{background:var(--brand-red)!important;color:#111!important;border-color:#111!important}}
 .presenceUsersTable th:nth-child(4),
 .presenceUsersTable th:nth-child(5),
 .presenceUsersTable th:nth-child(6),
@@ -3475,8 +3477,8 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
   body{{padding:0}}
   .actions,.rangePanel,.constraintsPanel{{display:none!important}}
   .page{{width:210mm;min-height:297mm;height:auto;margin:0;box-shadow:none;break-after:auto;page-break-after:auto;}}
-  .page--report .pageContent{{padding-top:8mm;padding-bottom:8mm;}}
-  .page--cover .pageContent{{padding:8mm;}}
+  .page--report .pageContent{{padding-top:5mm;padding-bottom:5mm;}}
+  .page--cover .pageContent{{padding:5mm 8mm;}}
   .reportHeader{{position:absolute;top:0;left:0;right:0;background:#fff;padding:4mm 8mm 2mm 8mm;z-index:20;}}
   .presenceGrip{{display:none!important}}
   .presenceUsersTable thead{{display:table-header-group}}
