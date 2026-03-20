@@ -188,7 +188,9 @@ _cache = {
     "users": (None, None),
     "packages": (None, None),
     "documents": (None, None),
+    "comments": (None, None),
 }
+_comments_map_cache: Tuple[Optional[float], Optional[Dict[str, List[Dict[str, str]]]]] = (None, None)
 
 
 def _mtime(path: str) -> float:
@@ -282,6 +284,18 @@ def get_documents() -> pd.DataFrame:
         _require_csv(DOCUMENTS_PATH, "Documents", "METRONOME_DOCUMENTS")
         df = _load_csv(DOCUMENTS_PATH)
         _cache["documents"] = (m, df)
+    return df
+
+
+def get_comments() -> pd.DataFrame:
+    m = _mtime(COMMENTS_PATH)
+    old_m, df = _cache["comments"]
+    if df is None or m != old_m:
+        if not os.path.exists(COMMENTS_PATH):
+            df = pd.DataFrame()
+        else:
+            df = _load_csv(COMMENTS_PATH)
+        _cache["comments"] = (m, df)
     return df
 
 
@@ -827,43 +841,167 @@ def render_images_gallery(urls: List[str], print_mode: bool) -> str:
 # -------------------------
 # COMMENTS (TASKS)
 # -------------------------
-def render_task_comment(r) -> str:
+def comments_by_entry_id() -> Dict[str, List[Dict[str, str]]]:
+    global _comments_map_cache
+    m = _mtime(COMMENTS_PATH)
+    old_m, cached = _comments_map_cache
+    if cached is not None and old_m == m:
+        return cached
+
+    df = get_comments().copy()
+    if df.empty:
+        _comments_map_cache = (m, {})
+        return {}
+
+    entry_col = _find_col(
+        df,
+        [
+            ["entries", "tasks", "memos", "id"],
+            ["entries", "id"],
+            ["entry", "id"],
+            ["task", "memo", "id"],
+            ["item", "id"],
+        ],
+    )
+    text_col = _find_col(
+        df,
+        [
+            ["full", "text"],
+            ["text", "display"],
+            ["comment", "text"],
+            ["text"],
+            ["comment"],
+        ],
+    )
+    author_col = _find_col(
+        df,
+        [
+            ["editor", "name"],
+            ["author", "name"],
+            ["author"],
+            ["editor"],
+            ["owner"],
+        ],
+    )
+    date_col = _find_col(
+        df,
+        [
+            ["comment", "date"],
+            ["date", "editable"],
+            ["date"],
+        ],
+    )
+    company_col = _find_col(
+        df,
+        [
+            ["company", "name"],
+            ["society"],
+            ["entreprise"],
+            ["company"],
+        ],
+    )
+
+    if not entry_col or not text_col:
+        _comments_map_cache = (m, {})
+        return {}
+
+    out: Dict[str, List[Dict[str, str]]] = {}
+    for _, row in df.iterrows():
+        entry_id = str(row.get(entry_col, "") or "").strip()
+        text_raw = row.get(text_col)
+        if not entry_id or text_raw is None or (isinstance(text_raw, float) and pd.isna(text_raw)):
+            continue
+        text = str(text_raw).strip()
+        if not text:
+            continue
+        author = str(row.get(author_col, "") or "").strip() if author_col else ""
+        company = str(row.get(company_col, "") or "").strip() if company_col else ""
+        d = _fmt_date(_parse_date_any(row.get(date_col))) if date_col else ""
+        out.setdefault(entry_id, []).append(
+            {
+                "text": text,
+                "author": author,
+                "company": company,
+                "date": d,
+            }
+        )
+
+    _comments_map_cache = (m, out)
+    return out
+
+
+def entry_comments_for_row(r) -> List[Dict[str, str]]:
+    comments: List[Dict[str, str]] = []
+    seen = set()
+
     txt = r.get(E_COL_TASK_COMMENT_FULL)
     if txt is None or (isinstance(txt, float) and pd.isna(txt)) or str(txt).strip() == "":
         txt = r.get(E_COL_TASK_COMMENT_TEXT)
-    if txt is None or (isinstance(txt, float) and pd.isna(txt)) or str(txt).strip() == "":
+    if txt is not None and not (isinstance(txt, float) and pd.isna(txt)) and str(txt).strip():
+        payload = {
+            "text": str(txt).strip(),
+            "author": str(r.get(E_COL_TASK_COMMENT_AUTHOR, "") or "").strip(),
+            "company": str(r.get(E_COL_COMPANY_TASK, "") or "").strip(),
+            "date": _fmt_date(_parse_date_any(r.get(E_COL_TASK_COMMENT_DATE))),
+        }
+        key = tuple(payload.values())
+        if key not in seen:
+            seen.add(key)
+            comments.append(payload)
+
+    entry_id = str(r.get(E_COL_ID, "") or "").strip()
+    for item in comments_by_entry_id().get(entry_id, []):
+        key = tuple((item.get("text", ""), item.get("author", ""), item.get("company", ""), item.get("date", "")))
+        if key in seen:
+            continue
+        seen.add(key)
+        comments.append(item)
+
+    return comments
+
+
+def render_task_comment(r) -> str:
+    comments = entry_comments_for_row(r)
+    if not comments:
         return ""
-    author = _escape(r.get(E_COL_TASK_COMMENT_AUTHOR, ""))
-    d = _fmt_date(_parse_date_any(r.get(E_COL_TASK_COMMENT_DATE)))
-    body = _format_entry_text_html(txt)
-    meta = " • ".join([x for x in [author, d] if x])
-    return f"""
+    blocks = []
+    for item in comments:
+        meta = " • ".join([x for x in [item.get("author", ""), item.get("company", ""), item.get("date", "")] if x])
+        body = _format_entry_text_html(item.get("text", ""))
+        if not body:
+            continue
+        blocks.append(
+            f"""
       <div class="topicComment">
         <div class="metaLabel">Commentaire</div>
         <div class="metaVal">{meta or "—"}</div>
         <div style="margin-top:6px">{body}</div>
       </div>
     """
+        )
+    return "".join(blocks)
 
 
 def render_entry_comment(r) -> str:
-    txt = r.get(E_COL_TASK_COMMENT_FULL)
-    if txt is None or (isinstance(txt, float) and pd.isna(txt)) or str(txt).strip() == "":
-        txt = r.get(E_COL_TASK_COMMENT_TEXT)
-    if txt is None or (isinstance(txt, float) and pd.isna(txt)) or str(txt).strip() == "":
+    comments = entry_comments_for_row(r)
+    if not comments:
         return ""
-    author = _escape(r.get(E_COL_TASK_COMMENT_AUTHOR, ""))
-    d = _fmt_date(_parse_date_any(r.get(E_COL_TASK_COMMENT_DATE)))
-    company = _escape(r.get(E_COL_COMPANY_TASK, ""))
-    body = _format_entry_text_html(txt)
-    meta = " • ".join([x for x in [author, company, d] if x])
-    return f"""
+    blocks = []
+    for item in comments:
+        meta = " • ".join([x for x in [item.get("author", ""), item.get("company", ""), item.get("date", "")] if x])
+        body = _format_entry_text_html(item.get("text", ""))
+        if not body:
+            continue
+        blocks.append(
+            f"""
       <div class="entryComment">
         <button type="button" class="entryCommentRemove noPrint" title="Supprimer le commentaire" aria-label="Supprimer le commentaire">×</button>
         <div class="metaVal textEditTarget" data-text-edit-target="1">{meta or "—"}</div>
         <div style="margin-top:6px" class="textEditTarget" data-text-edit-target="1">{body}</div>
       </div>
     """
+        )
+    return "".join(blocks)
 
 
 # -------------------------
