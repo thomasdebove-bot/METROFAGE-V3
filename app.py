@@ -352,6 +352,26 @@ def _sample_text_values(df: pd.DataFrame, col: str, limit: int = 12) -> List[str
     return values
 
 
+def _value_from_excel_col(df: pd.DataFrame, row: pd.Series, excel_col: str) -> str:
+    excel_col = (excel_col or "").strip().upper()
+    if not excel_col:
+        return ""
+    idx = 0
+    for ch in excel_col:
+        if not ("A" <= ch <= "Z"):
+            return ""
+        idx = idx * 26 + (ord(ch) - ord("A") + 1)
+    idx -= 1
+    if idx < 0 or idx >= len(df.columns):
+        return ""
+    col = df.columns[idx]
+    value = row.get(col, "")
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return ""
+    text = str(value).strip()
+    return "" if text.lower() == "nan" else text
+
+
 def _pick_best_comment_text_col(df: pd.DataFrame) -> Optional[str]:
     candidates = _candidate_cols(
         df,
@@ -1062,6 +1082,8 @@ def comments_by_entry_id() -> Dict[str, List[Dict[str, str]]]:
         if not text:
             continue
         author = str(row.get(author_col, "") or "").strip() if author_col else ""
+        if not author or author.lower() == "nan":
+            author = _value_from_excel_col(df, row, "M")
         d = _fmt_date(_parse_date_any(row.get(date_col))) if date_col else ""
         out.setdefault(entry_id, []).append(
             {
