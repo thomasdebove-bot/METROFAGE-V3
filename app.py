@@ -4023,9 +4023,10 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
 .thumbs{{margin-top:6px;display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start}}
 .thumb{{width:160px;height:auto;max-width:100%;border:1px solid var(--border);border-radius:8px;display:block;object-fit:cover;background:#fff}}
 .entryComment{{margin-top:8px;padding-left:12px;border-left:3px solid #e2e8f0}}
-.entryComment{{position:relative;padding-right:26px}}
-.entryCommentRemove{{position:absolute;top:0;right:0;width:20px;height:20px;border:1px solid #d1d5db;border-radius:999px;background:#fff;color:#111;font-size:14px;line-height:18px;font-weight:900;cursor:pointer}}
-.entryCommentRemove:hover{{background:#fee2e2;border-color:#ef4444;color:#991b1b}}
+.entryComment{{position:relative;padding:2px 34px 0 12px}}
+.entryCommentRemove{{position:absolute;top:2px;right:0;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border:1px solid #cbd5e1;border-radius:999px;background:#f8fafc;color:#475569;font-size:11px;line-height:1;font-weight:800;padding:0;box-shadow:0 1px 1px rgba(15,23,42,.08);cursor:pointer;transition:background-color .15s ease,border-color .15s ease,color .15s ease,transform .15s ease}}
+.entryCommentRemove:hover{{background:#fee2e2;border-color:#fca5a5;color:#b91c1c;transform:scale(1.05)}}
+.entryCommentRemove:focus-visible{{outline:2px solid #fb7185;outline-offset:1px}}
 .tagReminderGreen{{color:#16a34a;font-weight:900}}
 .thumbA{{display:inline-flex;cursor:grab}}
 .commentText{{font-weight:400;line-height:1.24;white-space:normal;text-align:justify}}
