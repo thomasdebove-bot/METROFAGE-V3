@@ -359,6 +359,11 @@ def _pick_best_comment_text_col(df: pd.DataFrame) -> Optional[str]:
             ["comment", "full", "text"],
             ["comment", "text"],
             ["comment"],
+            ["message"],
+            ["content"],
+            ["body"],
+            ["note"],
+            ["description"],
             ["full", "text", "display"],
             ["text", "display"],
             ["full", "text"],
@@ -385,10 +390,18 @@ def _pick_best_comment_text_col(df: pd.DataFrame) -> Optional[str]:
         bool_count = sum(v.lower() in {"true", "false"} for v in values)
         if bool_count:
             score -= 30 * (bool_count / len(values))
+        numeric_count = sum(bool(re.fullmatch(r"\d+(?:[.,]\d+)?", v)) for v in values)
+        if numeric_count:
+            score -= 35 * (numeric_count / len(values))
+        url_count = sum(v.lower().startswith(("http://", "https://")) for v in values)
+        if url_count:
+            score -= 25 * (url_count / len(values))
         avg_len = sum(len(v) for v in values) / len(values)
         score += min(avg_len, 120) / 6
         if any(" " in v for v in values):
             score += 4
+        alpha_count = sum(bool(re.search(r"[A-Za-zÀ-ÿ]", v)) for v in values)
+        score += 12 * (alpha_count / len(values))
         id_like = sum(bool(re.fullmatch(r"[A-Za-z0-9_-]{10,}", v)) and " " not in v for v in values)
         if id_like:
             score -= 20 * (id_like / len(values))
@@ -434,6 +447,8 @@ def _pick_best_comment_author_col(df: pd.DataFrame) -> Optional[str]:
     candidates = _candidate_cols(
         df,
         [
+            ["owner", "full", "name"],
+            ["owner", "name"],
             ["editor", "full", "name"],
             ["editor", "name"],
             ["author", "full", "name"],
@@ -444,7 +459,7 @@ def _pick_best_comment_author_col(df: pd.DataFrame) -> Optional[str]:
             ["author"],
             ["owner"],
         ],
-        exclude_tokens=["id", "mail", "email", "company", "society", "entreprise", "date", "text", "comment"],
+        exclude_tokens=["id", "mail", "email", "picture", "photo", "image", "avatar", "url", "company", "society", "entreprise", "date", "text", "comment"],
     )
     best_col = None
     best_score = float("-inf")
@@ -462,6 +477,9 @@ def _pick_best_comment_author_col(df: pd.DataFrame) -> Optional[str]:
             continue
         with_spaces = sum(" " in v for v in values)
         score += 10 * (with_spaces / len(values))
+        url_like = sum(v.lower().startswith(("http://", "https://")) for v in values)
+        if url_like:
+            score -= 40 * (url_like / len(values))
         id_like = sum(bool(re.fullmatch(r"[A-Za-z0-9_-]{10,}", v)) and " " not in v for v in values)
         if id_like:
             score -= 30 * (id_like / len(values))
