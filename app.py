@@ -324,6 +324,114 @@ def _find_col(df: pd.DataFrame, candidates: List[List[str]]) -> Optional[str]:
     return None
 
 
+def _candidate_cols(df: pd.DataFrame, candidates: List[List[str]], exclude_tokens: Optional[List[str]] = None) -> List[str]:
+    exclude_tokens = [t.lower() for t in (exclude_tokens or [])]
+    found: List[str] = []
+    for col in df.columns:
+        col_lower = str(col).lower()
+        if any(token in col_lower for token in exclude_tokens):
+            continue
+        if any(all(token in col_lower for token in tokens) for tokens in candidates):
+            found.append(col)
+    return found
+
+
+def _sample_text_values(df: pd.DataFrame, col: str, limit: int = 12) -> List[str]:
+    values: List[str] = []
+    if col not in df.columns:
+        return values
+    for value in _series(df, col, "").tolist():
+        if value is None or (isinstance(value, float) and pd.isna(value)):
+            continue
+        text = str(value).strip()
+        if not text:
+            continue
+        values.append(text)
+        if len(values) >= limit:
+            break
+    return values
+
+
+def _pick_best_comment_text_col(df: pd.DataFrame) -> Optional[str]:
+    candidates = _candidate_cols(
+        df,
+        [
+            ["comment", "full", "text"],
+            ["comment", "text"],
+            ["full", "text", "display"],
+            ["text", "display"],
+            ["full", "text"],
+            ["text"],
+        ],
+        exclude_tokens=["archived", "status", "owner", "editor", "name", "id", "date", "done", "deadline"],
+    )
+    best_col = None
+    best_score = float("-inf")
+    for col in candidates:
+        col_lower = str(col).lower()
+        score = 0.0
+        if "comment" in col_lower:
+            score += 12
+        if "full" in col_lower and "text" in col_lower:
+            score += 8
+        if "display" in col_lower:
+            score += 5
+        values = _sample_text_values(df, col)
+        if not values:
+            continue
+        bool_count = sum(v.lower() in {"true", "false"} for v in values)
+        if bool_count:
+            score -= 30 * (bool_count / len(values))
+        avg_len = sum(len(v) for v in values) / len(values)
+        score += min(avg_len, 120) / 6
+        if any(" " in v for v in values):
+            score += 4
+        if score > best_score:
+            best_score = score
+            best_col = col
+    return best_col
+
+
+def _pick_best_comment_author_col(df: pd.DataFrame) -> Optional[str]:
+    candidates = _candidate_cols(
+        df,
+        [
+            ["editor", "full", "name"],
+            ["editor", "name"],
+            ["author", "full", "name"],
+            ["author", "name"],
+            ["full", "name"],
+            ["name", "display"],
+        ],
+        exclude_tokens=["id", "mail", "email", "company", "society", "entreprise", "date", "text"],
+    )
+    best_col = None
+    best_score = float("-inf")
+    for col in candidates:
+        col_lower = str(col).lower()
+        score = 0.0
+        if "editor" in col_lower:
+            score += 12
+        if "author" in col_lower:
+            score += 10
+        if "full" in col_lower and "name" in col_lower:
+            score += 8
+        values = _sample_text_values(df, col)
+        if not values:
+            continue
+        with_spaces = sum(" " in v for v in values)
+        score += 10 * (with_spaces / len(values))
+        id_like = sum(bool(re.fullmatch(r"[A-Za-z0-9_-]{10,}", v)) and " " not in v for v in values)
+        if id_like:
+            score -= 30 * (id_like / len(values))
+        if any("(" in v and ")" in v for v in values):
+            score += 4
+        if score > best_score:
+            best_score = score
+            best_col = col
+    return best_col
+
+
 def _series(df: pd.DataFrame, col: str, default) -> pd.Series:
     if col in df.columns:
         data = df[col]
@@ -857,47 +965,23 @@ def comments_by_entry_id() -> Dict[str, List[Dict[str, str]]]:
         df,
         [
             ["entries", "tasks", "memos", "id"],
-            ["entries", "id"],
             ["entry", "id"],
+            ["entries", "id"],
             ["task", "memo", "id"],
-            ["item", "id"],
+            ["task", "id"],
+            ["memo", "id"],
         ],
     )
-    text_col = _find_col(
-        df,
-        [
-            ["full", "text"],
-            ["text", "display"],
-            ["comment", "text"],
-            ["text"],
-            ["comment"],
-        ],
-    )
-    author_col = _find_col(
-        df,
-        [
-            ["editor", "name"],
-            ["author", "name"],
-            ["author"],
-            ["editor"],
-            ["owner"],
-        ],
-    )
+    text_col = _pick_best_comment_text_col(df)
+    author_col = _pick_best_comment_author_col(df)
     date_col = _find_col(
         df,
         [
+            ["comment", "date", "display"],
             ["comment", "date"],
+            ["date", "display"],
             ["date", "editable"],
             ["date"],
-        ],
-    )
-    company_col = _find_col(
-        df,
-        [
-            ["company", "name"],
-            ["society"],
-            ["entreprise"],
-            ["company"],
         ],
     )
 
@@ -915,13 +999,12 @@ def comments_by_entry_id() -> Dict[str, List[Dict[str, str]]]:
         if not text:
             continue
         author = str(row.get(author_col, "") or "").strip() if author_col else ""
-        company = str(row.get(company_col, "") or "").strip() if company_col else ""
         d = _fmt_date(_parse_date_any(row.get(date_col))) if date_col else ""
         out.setdefault(entry_id, []).append(
             {
                 "text": text,
                 "author": author,
-                "company": company,
+                "company": "",
                 "date": d,
             }
         )
