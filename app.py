@@ -372,6 +372,24 @@ def _value_from_excel_col(df: pd.DataFrame, row: pd.Series, excel_col: str) -> s
     return "" if text.lower() == "nan" else text
 
 
+def _clean_comment_author(value) -> str:
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    lower = text.lower()
+    if lower in {"nan", "none", "null", "true", "false"}:
+        return ""
+    if lower.startswith(("http://", "https://")):
+        return ""
+    if re.fullmatch(r"\d+(?:[.,]\d+)?", text):
+        return ""
+    if re.fullmatch(r"[A-Za-z0-9_-]{10,}", text) and " " not in text:
+        return ""
+    return text
+
+
 def _pick_best_comment_text_col(df: pd.DataFrame) -> Optional[str]:
     candidates = _candidate_cols(
         df,
@@ -500,6 +518,12 @@ def _pick_best_comment_author_col(df: pd.DataFrame) -> Optional[str]:
         url_like = sum(v.lower().startswith(("http://", "https://")) for v in values)
         if url_like:
             score -= 40 * (url_like / len(values))
+        bool_like = sum(v.lower() in {"true", "false", "nan", "none", "null"} for v in values)
+        if bool_like:
+            score -= 60 * (bool_like / len(values))
+        numeric_like = sum(bool(re.fullmatch(r"\d+(?:[.,]\d+)?", v)) for v in values)
+        if numeric_like:
+            score -= 35 * (numeric_like / len(values))
         id_like = sum(bool(re.fullmatch(r"[A-Za-z0-9_-]{10,}", v)) and " " not in v for v in values)
         if id_like:
             score -= 30 * (id_like / len(values))
@@ -1081,9 +1105,10 @@ def comments_by_entry_id() -> Dict[str, List[Dict[str, str]]]:
         text = str(text_raw).strip()
         if not text:
             continue
-        author = str(row.get(author_col, "") or "").strip() if author_col else ""
-        if not author or author.lower() == "nan":
-            author = _value_from_excel_col(df, row, "M")
+        author = _clean_comment_author(row.get(author_col, "")) if author_col else ""
+        author_from_m = _clean_comment_author(_value_from_excel_col(df, row, "M"))
+        if author_from_m:
+            author = author_from_m
         d = _fmt_date(_parse_date_any(row.get(date_col))) if date_col else ""
         out.setdefault(entry_id, []).append(
             {
