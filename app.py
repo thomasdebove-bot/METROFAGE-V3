@@ -358,12 +358,13 @@ def _pick_best_comment_text_col(df: pd.DataFrame) -> Optional[str]:
         [
             ["comment", "full", "text"],
             ["comment", "text"],
+            ["comment"],
             ["full", "text", "display"],
             ["text", "display"],
             ["full", "text"],
             ["text"],
         ],
-        exclude_tokens=["archived", "status", "owner", "editor", "name", "id", "date", "done", "deadline"],
+        exclude_tokens=["id", "date", "mail", "email"],
     )
     best_col = None
     best_score = float("-inf")
@@ -376,6 +377,8 @@ def _pick_best_comment_text_col(df: pd.DataFrame) -> Optional[str]:
             score += 8
         if "display" in col_lower:
             score += 5
+        if "archived" in col_lower or "status" in col_lower:
+            score -= 18
         values = _sample_text_values(df, col)
         if not values:
             continue
@@ -386,6 +389,41 @@ def _pick_best_comment_text_col(df: pd.DataFrame) -> Optional[str]:
         score += min(avg_len, 120) / 6
         if any(" " in v for v in values):
             score += 4
+        id_like = sum(bool(re.fullmatch(r"[A-Za-z0-9_-]{10,}", v)) and " " not in v for v in values)
+        if id_like:
+            score -= 20 * (id_like / len(values))
+        if score > best_score:
+            best_score = score
+            best_col = col
+    return best_col
+
+
+def _pick_best_comment_entry_col(df: pd.DataFrame) -> Optional[str]:
+    best_col = None
+    best_score = float("-inf")
+    for col in df.columns:
+        col_lower = str(col).lower()
+        if "id" not in col_lower:
+            continue
+        score = 0.0
+        if "entries" in col_lower or "entry" in col_lower:
+            score += 20
+        if "task" in col_lower or "memo" in col_lower:
+            score += 12
+        if "item" in col_lower or "parent" in col_lower:
+            score += 8
+        if "row id" in col_lower and ("entries" in col_lower or "entry" in col_lower or "task" in col_lower or "memo" in col_lower):
+            score += 8
+        if "comment" in col_lower and "row id" in col_lower:
+            score -= 25
+        if col_lower.strip() == "🔒 row id".lower() or col_lower.endswith("/row id") and "entry" not in col_lower and "task" not in col_lower and "memo" not in col_lower:
+            score -= 40
+        values = _sample_text_values(df, col)
+        if not values:
+            continue
+        avg_len = sum(len(v) for v in values) / len(values)
+        if avg_len >= 8:
+            score += 2
         if score > best_score:
             best_score = score
             best_col = col
@@ -402,8 +440,11 @@ def _pick_best_comment_author_col(df: pd.DataFrame) -> Optional[str]:
             ["author", "name"],
             ["full", "name"],
             ["name", "display"],
+            ["editor"],
+            ["author"],
+            ["owner"],
         ],
-        exclude_tokens=["id", "mail", "email", "company", "society", "entreprise", "date", "text"],
+        exclude_tokens=["id", "mail", "email", "company", "society", "entreprise", "date", "text", "comment"],
     )
     best_col = None
     best_score = float("-inf")
@@ -961,7 +1002,7 @@ def comments_by_entry_id() -> Dict[str, List[Dict[str, str]]]:
         _comments_map_cache = (m, {})
         return {}
 
-    entry_col = _find_col(
+    entry_col = _pick_best_comment_entry_col(df) or _find_col(
         df,
         [
             ["entries", "tasks", "memos", "id"],
@@ -970,9 +1011,13 @@ def comments_by_entry_id() -> Dict[str, List[Dict[str, str]]]:
             ["task", "memo", "id"],
             ["task", "id"],
             ["memo", "id"],
+            ["item", "id"],
+            ["parent", "id"],
         ],
     )
     text_col = _pick_best_comment_text_col(df)
+    if not text_col:
+        text_col = _find_col(df, [["comment", "text"], ["full", "text"], ["text"], ["comment"]])
     author_col = _pick_best_comment_author_col(df)
     date_col = _find_col(
         df,
@@ -3880,7 +3925,7 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
 .sessionSubRow td.colComment{{font-size:12px;color:#111827;font-weight:900;text-decoration:none;}}
 .sessionSubRowCurrent td.colComment{{color:#1d4ed8;text-decoration:underline;text-underline-offset:2px;}}
 .colType{{text-align:center;font-weight:1000;white-space:nowrap;position:relative}}
-.colComment{{white-space:normal;position:relative}}
+.colComment{{white-space:normal;position:relative;text-align:justify}}
 .textEditTarget{{outline:none}}
 .textEditTarget.textEditEnabled{{background:#fff7ed;box-shadow:inset 0 0 0 1px #fdba74;border-radius:6px;padding:2px 4px}}
 .textEditTarget.textEditEnabled:focus{{box-shadow:inset 0 0 0 2px #fb923c}}
@@ -3918,7 +3963,9 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
 .entryCommentRemove:hover{{background:#fee2e2;border-color:#ef4444;color:#991b1b}}
 .tagReminderGreen{{color:#16a34a;font-weight:900}}
 .thumbA{{display:inline-flex;cursor:grab}}
-.commentText{{font-weight:400;line-height:1.24;white-space:normal}}
+.commentText{{font-weight:400;line-height:1.24;white-space:normal;text-align:justify}}
+.entryComment .textEditTarget{{text-align:justify}}
+.topicComment{{text-align:justify}}
 .tagReminder{{color:#b91c1c;font-weight:900}}
 .thumbAWrap{{position:relative;display:inline-flex;touch-action:none;max-width:100%;align-items:flex-start}}
 .thumbAWrap.dragging{{opacity:.7;z-index:5}}
