@@ -122,6 +122,10 @@ CONTENT_PATH = os.getenv(
     "METRONOME_CONTENT",
     r"\\192.168.10.100\02 - affaires\02.2 - SYNTHESE\ZZ - METRONOME\Content",
 )
+DEFAULT_MZA_COVER_IMAGE_PATH = os.getenv(
+    "METRONOME_MZA_COVER_IMAGE",
+    r"\\192.168.10.100\02 - affaires\02.2 - SYNTHESE\ZZ - METRONOME\Content\MZA.png",
+)
 
 # -------------------------
 # COLUMN NAMES (METRONOME EXPORTS)
@@ -184,7 +188,9 @@ _cache = {
     "users": (None, None),
     "packages": (None, None),
     "documents": (None, None),
+    "comments": (None, None),
 }
+_comments_map_cache: Tuple[Optional[float], Optional[Dict[str, List[Dict[str, str]]]]] = (None, None)
 
 
 def _mtime(path: str) -> float:
@@ -281,6 +287,18 @@ def get_documents() -> pd.DataFrame:
     return df
 
 
+def get_comments() -> pd.DataFrame:
+    m = _mtime(COMMENTS_PATH)
+    old_m, df = _cache["comments"]
+    if df is None or m != old_m:
+        if not os.path.exists(COMMENTS_PATH):
+            df = pd.DataFrame()
+        else:
+            df = _load_csv(COMMENTS_PATH)
+        _cache["comments"] = (m, df)
+    return df
+
+
 # -------------------------
 # UTILITIES
 # -------------------------
@@ -304,6 +322,217 @@ def _find_col(df: pd.DataFrame, candidates: List[List[str]]) -> Optional[str]:
             if all(token in col_lower for token in tokens):
                 return col
     return None
+
+
+def _candidate_cols(df: pd.DataFrame, candidates: List[List[str]], exclude_tokens: Optional[List[str]] = None) -> List[str]:
+    exclude_tokens = [t.lower() for t in (exclude_tokens or [])]
+    found: List[str] = []
+    for col in df.columns:
+        col_lower = str(col).lower()
+        if any(token in col_lower for token in exclude_tokens):
+            continue
+        if any(all(token in col_lower for token in tokens) for tokens in candidates):
+            found.append(col)
+    return found
+
+
+def _sample_text_values(df: pd.DataFrame, col: str, limit: int = 12) -> List[str]:
+    values: List[str] = []
+    if col not in df.columns:
+        return values
+    for value in _series(df, col, "").tolist():
+        if value is None or (isinstance(value, float) and pd.isna(value)):
+            continue
+        text = str(value).strip()
+        if not text:
+            continue
+        values.append(text)
+        if len(values) >= limit:
+            break
+    return values
+
+
+def _value_from_excel_col(df: pd.DataFrame, row: pd.Series, excel_col: str) -> str:
+    excel_col = (excel_col or "").strip().upper()
+    if not excel_col:
+        return ""
+    idx = 0
+    for ch in excel_col:
+        if not ("A" <= ch <= "Z"):
+            return ""
+        idx = idx * 26 + (ord(ch) - ord("A") + 1)
+    idx -= 1
+    if idx < 0 or idx >= len(df.columns):
+        return ""
+    col = df.columns[idx]
+    value = row.get(col, "")
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return ""
+    text = str(value).strip()
+    return "" if text.lower() == "nan" else text
+
+
+def _clean_comment_author(value) -> str:
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    lower = text.lower()
+    if lower in {"nan", "none", "null", "true", "false"}:
+        return ""
+    if lower.startswith(("http://", "https://")):
+        return ""
+    if re.fullmatch(r"\d+(?:[.,]\d+)?", text):
+        return ""
+    if re.fullmatch(r"[A-Za-z0-9_-]{10,}", text) and " " not in text:
+        return ""
+    return text
+
+
+def _pick_best_comment_text_col(df: pd.DataFrame) -> Optional[str]:
+    candidates = _candidate_cols(
+        df,
+        [
+            ["comment", "full", "text"],
+            ["comment", "text"],
+            ["comment"],
+            ["message"],
+            ["content"],
+            ["body"],
+            ["note"],
+            ["description"],
+            ["full", "text", "display"],
+            ["text", "display"],
+            ["full", "text"],
+            ["text"],
+        ],
+        exclude_tokens=["id", "date", "mail", "email"],
+    )
+    best_col = None
+    best_score = float("-inf")
+    for col in candidates:
+        col_lower = str(col).lower()
+        score = 0.0
+        if "comment" in col_lower:
+            score += 12
+        if "full" in col_lower and "text" in col_lower:
+            score += 8
+        if "display" in col_lower:
+            score += 5
+        if "archived" in col_lower or "status" in col_lower:
+            score -= 18
+        values = _sample_text_values(df, col)
+        if not values:
+            continue
+        bool_count = sum(v.lower() in {"true", "false"} for v in values)
+        if bool_count:
+            score -= 30 * (bool_count / len(values))
+        numeric_count = sum(bool(re.fullmatch(r"\d+(?:[.,]\d+)?", v)) for v in values)
+        if numeric_count:
+            score -= 35 * (numeric_count / len(values))
+        url_count = sum(v.lower().startswith(("http://", "https://")) for v in values)
+        if url_count:
+            score -= 25 * (url_count / len(values))
+        avg_len = sum(len(v) for v in values) / len(values)
+        score += min(avg_len, 120) / 6
+        if any(" " in v for v in values):
+            score += 4
+        alpha_count = sum(bool(re.search(r"[A-Za-zÀ-ÿ]", v)) for v in values)
+        score += 12 * (alpha_count / len(values))
+        id_like = sum(bool(re.fullmatch(r"[A-Za-z0-9_-]{10,}", v)) and " " not in v for v in values)
+        if id_like:
+            score -= 20 * (id_like / len(values))
+        if score > best_score:
+            best_score = score
+            best_col = col
+    return best_col
+
+
+def _pick_best_comment_entry_col(df: pd.DataFrame) -> Optional[str]:
+    best_col = None
+    best_score = float("-inf")
+    for col in df.columns:
+        col_lower = str(col).lower()
+        if "id" not in col_lower:
+            continue
+        score = 0.0
+        if "entries" in col_lower or "entry" in col_lower:
+            score += 20
+        if "task" in col_lower or "memo" in col_lower:
+            score += 12
+        if "item" in col_lower or "parent" in col_lower:
+            score += 8
+        if "row id" in col_lower and ("entries" in col_lower or "entry" in col_lower or "task" in col_lower or "memo" in col_lower):
+            score += 8
+        if "comment" in col_lower and "row id" in col_lower:
+            score -= 25
+        if col_lower.strip() == "🔒 row id".lower() or col_lower.endswith("/row id") and "entry" not in col_lower and "task" not in col_lower and "memo" not in col_lower:
+            score -= 40
+        values = _sample_text_values(df, col)
+        if not values:
+            continue
+        avg_len = sum(len(v) for v in values) / len(values)
+        if avg_len >= 8:
+            score += 2
+        if score > best_score:
+            best_score = score
+            best_col = col
+    return best_col
+
+
+def _pick_best_comment_author_col(df: pd.DataFrame) -> Optional[str]:
+    candidates = _candidate_cols(
+        df,
+        [
+            ["owner", "full", "name"],
+            ["owner", "name"],
+            ["editor", "full", "name"],
+            ["editor", "name"],
+            ["author", "full", "name"],
+            ["author", "name"],
+            ["full", "name"],
+            ["name", "display"],
+            ["editor"],
+            ["author"],
+            ["owner"],
+        ],
+        exclude_tokens=["id", "mail", "email", "picture", "photo", "image", "avatar", "url", "company", "society", "entreprise", "date", "text", "comment"],
+    )
+    best_col = None
+    best_score = float("-inf")
+    for col in candidates:
+        col_lower = str(col).lower()
+        score = 0.0
+        if "editor" in col_lower:
+            score += 12
+        if "author" in col_lower:
+            score += 10
+        if "full" in col_lower and "name" in col_lower:
+            score += 8
+        values = _sample_text_values(df, col)
+        if not values:
+            continue
+        with_spaces = sum(" " in v for v in values)
+        score += 10 * (with_spaces / len(values))
+        url_like = sum(v.lower().startswith(("http://", "https://")) for v in values)
+        if url_like:
+            score -= 40 * (url_like / len(values))
+        bool_like = sum(v.lower() in {"true", "false", "nan", "none", "null"} for v in values)
+        if bool_like:
+            score -= 60 * (bool_like / len(values))
+        numeric_like = sum(bool(re.fullmatch(r"\d+(?:[.,]\d+)?", v)) for v in values)
+        if numeric_like:
+            score -= 35 * (numeric_like / len(values))
+        id_like = sum(bool(re.fullmatch(r"[A-Za-z0-9_-]{10,}", v)) and " " not in v for v in values)
+        if id_like:
+            score -= 30 * (id_like / len(values))
+        if any("(" in v and ")" in v for v in values):
+            score += 4
+        if score > best_score:
+            best_score = score
+            best_col = col
+    return best_col
 
 
 def _series(df: pd.DataFrame, col: str, default) -> pd.Series:
@@ -823,42 +1052,149 @@ def render_images_gallery(urls: List[str], print_mode: bool) -> str:
 # -------------------------
 # COMMENTS (TASKS)
 # -------------------------
-def render_task_comment(r) -> str:
+def comments_by_entry_id() -> Dict[str, List[Dict[str, str]]]:
+    global _comments_map_cache
+    m = _mtime(COMMENTS_PATH)
+    old_m, cached = _comments_map_cache
+    if cached is not None and old_m == m:
+        return cached
+
+    df = get_comments().copy()
+    if df.empty:
+        _comments_map_cache = (m, {})
+        return {}
+
+    entry_col = _pick_best_comment_entry_col(df) or _find_col(
+        df,
+        [
+            ["entries", "tasks", "memos", "id"],
+            ["entry", "id"],
+            ["entries", "id"],
+            ["task", "memo", "id"],
+            ["task", "id"],
+            ["memo", "id"],
+            ["item", "id"],
+            ["parent", "id"],
+        ],
+    )
+    text_col = _pick_best_comment_text_col(df)
+    if not text_col:
+        text_col = _find_col(df, [["comment", "text"], ["full", "text"], ["text"], ["comment"]])
+    author_col = _pick_best_comment_author_col(df)
+    date_col = _find_col(
+        df,
+        [
+            ["comment", "date", "display"],
+            ["comment", "date"],
+            ["date", "display"],
+            ["date", "editable"],
+            ["date"],
+        ],
+    )
+
+    if not entry_col or not text_col:
+        _comments_map_cache = (m, {})
+        return {}
+
+    out: Dict[str, List[Dict[str, str]]] = {}
+    for _, row in df.iterrows():
+        entry_id = str(row.get(entry_col, "") or "").strip()
+        text_raw = row.get(text_col)
+        if not entry_id or text_raw is None or (isinstance(text_raw, float) and pd.isna(text_raw)):
+            continue
+        text = str(text_raw).strip()
+        if not text:
+            continue
+        author = _clean_comment_author(row.get(author_col, "")) if author_col else ""
+        author_from_m = _clean_comment_author(_value_from_excel_col(df, row, "M"))
+        if author_from_m:
+            author = author_from_m
+        d = _fmt_date(_parse_date_any(row.get(date_col))) if date_col else ""
+        out.setdefault(entry_id, []).append(
+            {
+                "text": text,
+                "author": author,
+                "company": "",
+                "date": d,
+            }
+        )
+
+    _comments_map_cache = (m, out)
+    return out
+
+
+def entry_comments_for_row(r) -> List[Dict[str, str]]:
+    comments: List[Dict[str, str]] = []
+    seen = set()
+
     txt = r.get(E_COL_TASK_COMMENT_FULL)
     if txt is None or (isinstance(txt, float) and pd.isna(txt)) or str(txt).strip() == "":
         txt = r.get(E_COL_TASK_COMMENT_TEXT)
-    if txt is None or (isinstance(txt, float) and pd.isna(txt)) or str(txt).strip() == "":
+    if txt is not None and not (isinstance(txt, float) and pd.isna(txt)) and str(txt).strip():
+        payload = {
+            "text": str(txt).strip(),
+            "author": str(r.get(E_COL_TASK_COMMENT_AUTHOR, "") or "").strip(),
+            "company": str(r.get(E_COL_COMPANY_TASK, "") or "").strip(),
+            "date": _fmt_date(_parse_date_any(r.get(E_COL_TASK_COMMENT_DATE))),
+        }
+        key = tuple(payload.values())
+        if key not in seen:
+            seen.add(key)
+            comments.append(payload)
+
+    entry_id = str(r.get(E_COL_ID, "") or "").strip()
+    for item in comments_by_entry_id().get(entry_id, []):
+        key = tuple((item.get("text", ""), item.get("author", ""), item.get("company", ""), item.get("date", "")))
+        if key in seen:
+            continue
+        seen.add(key)
+        comments.append(item)
+
+    return comments
+
+
+def render_task_comment(r) -> str:
+    comments = entry_comments_for_row(r)
+    if not comments:
         return ""
-    author = _escape(r.get(E_COL_TASK_COMMENT_AUTHOR, ""))
-    d = _fmt_date(_parse_date_any(r.get(E_COL_TASK_COMMENT_DATE)))
-    body = _format_entry_text_html(txt)
-    meta = " • ".join([x for x in [author, d] if x])
-    return f"""
+    blocks = []
+    for item in comments:
+        meta = " • ".join([x for x in [item.get("author", ""), item.get("company", ""), item.get("date", "")] if x])
+        body = _format_entry_text_html(item.get("text", ""))
+        if not body:
+            continue
+        blocks.append(
+            f"""
       <div class="topicComment">
         <div class="metaLabel">Commentaire</div>
         <div class="metaVal">{meta or "—"}</div>
         <div style="margin-top:6px">{body}</div>
       </div>
     """
+        )
+    return "".join(blocks)
 
 
 def render_entry_comment(r) -> str:
-    txt = r.get(E_COL_TASK_COMMENT_FULL)
-    if txt is None or (isinstance(txt, float) and pd.isna(txt)) or str(txt).strip() == "":
-        txt = r.get(E_COL_TASK_COMMENT_TEXT)
-    if txt is None or (isinstance(txt, float) and pd.isna(txt)) or str(txt).strip() == "":
+    comments = entry_comments_for_row(r)
+    if not comments:
         return ""
-    author = _escape(r.get(E_COL_TASK_COMMENT_AUTHOR, ""))
-    d = _fmt_date(_parse_date_any(r.get(E_COL_TASK_COMMENT_DATE)))
-    company = _escape(r.get(E_COL_COMPANY_TASK, ""))
-    body = _format_entry_text_html(txt)
-    meta = " • ".join([x for x in [author, company, d] if x])
-    return f"""
+    blocks = []
+    for item in comments:
+        meta = " • ".join([x for x in [item.get("author", ""), item.get("company", ""), item.get("date", "")] if x])
+        body = _format_entry_text_html(item.get("text", ""))
+        if not body:
+            continue
+        blocks.append(
+            f"""
       <div class="entryComment">
-        <div class="metaVal">{meta or "—"}</div>
-        <div style="margin-top:6px">{body}</div>
+        <button type="button" class="entryCommentRemove noPrint" title="Supprimer le commentaire" aria-label="Supprimer le commentaire">×</button>
+        <div class="metaVal textEditTarget" data-text-edit-target="1">{meta or "—"}</div>
+        <div style="margin-top:6px" class="textEditTarget" data-text-edit-target="1">{body}</div>
       </div>
     """
+        )
+    return "".join(blocks)
 
 
 # -------------------------
@@ -1253,6 +1589,204 @@ EDITOR_MEMO_MODAL_JS = r"""
     const btn = e.target.closest(".btnAddMemo");
     if(!btn) return;
     open(btn.getAttribute("data-area")||"");
+  });
+})();
+"""
+
+TEXT_EDIT_WARNING_MODAL_CSS = r"""
+.textEditWarningModal{position:fixed; inset:0; padding:16px 16px 16px 290px; background:rgba(0,0,0,.35); display:none; align-items:flex-start; justify-content:center; overflow:auto; z-index:9999}
+.textEditWarningModal .panel{background:#fff; width:min(700px, calc(100vw - 330px)); max-height:calc(100vh - 32px); overflow:auto; border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,.25)}
+@media (max-width:1200px){.textEditWarningModal{padding:16px}.textEditWarningModal .panel{width:min(700px,94vw)}}
+.textEditWarningModal .head{display:flex; gap:12px; align-items:center; padding:16px 18px; border-bottom:1px solid #eee}
+.textEditWarningModal .body{padding:18px; line-height:1.5}
+.textEditWarningModal .actions{position:static; width:auto; padding:0; border:none; border-radius:0; background:transparent; box-shadow:none; display:flex; flex-direction:row; justify-content:flex-end; gap:10px; margin-top:18px}
+"""
+
+TEXT_EDIT_WARNING_MODAL_HTML = r"""
+<div class="textEditWarningModal" id="textEditWarningModal">
+  <div class="panel">
+    <div class="head">
+      <h3 style="margin:0">Avertissement édition texte</h3>
+      <div style="margin-left:auto"></div>
+      <button class="memoBtn" id="textEditWarningClose" type="button">Fermer</button>
+    </div>
+    <div class="body">
+      <div>Attention, les modifications textuelles réalisées dans <strong>Commentaires et observations</strong> ne seront pas mises à jour dans METRONOME.</div>
+      <div class="actions">
+        <button class="memoBtn memoBtnPrimary" id="textEditWarningAcknowledge" type="button">J’ai compris</button>
+      </div>
+    </div>
+  </div>
+</div>
+"""
+
+TEXT_EDIT_WARNING_MODAL_JS = r"""
+(function(){
+  const modal = document.getElementById('textEditWarningModal');
+  if(!modal) return;
+  function close(){ modal.style.display = 'none'; }
+  window.openTextEditWarning = function(){ modal.style.display = 'flex'; };
+  document.getElementById('textEditWarningClose').onclick = close;
+  document.getElementById('textEditWarningAcknowledge').onclick = close;
+  modal.addEventListener('click', (e)=>{ if(e.target===modal) close(); });
+})();
+"""
+
+ZONE_ORDER_MODAL_CSS = r"""
+.zoneOrderModal{position:fixed; inset:0; padding:16px 16px 16px 290px; background:rgba(0,0,0,.35); display:none; align-items:flex-start; justify-content:center; overflow:auto; z-index:9998}
+.zoneOrderModal .panel{background:#fff; width:min(760px, calc(100vw - 330px)); max-height:calc(100vh - 32px); overflow:auto; border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,.25)}
+@media (max-width:1200px){.zoneOrderModal{padding:16px}.zoneOrderModal .panel{width:min(760px,94vw)}}
+.zoneOrderModal .head{display:flex; gap:12px; align-items:center; padding:16px 18px; border-bottom:1px solid #eee}
+.zoneOrderModal .body{padding:18px}
+.zoneOrderHelp{color:#475569; font-size:13px; line-height:1.4; margin-bottom:12px}
+.zoneOrderList{display:flex; flex-direction:column; gap:10px}
+.zoneOrderItem{display:flex; align-items:center; gap:10px; border:1px solid #e2e8f0; border-radius:12px; padding:10px 12px; background:#fff; cursor:grab}
+.zoneOrderItem.dragging{opacity:.55}
+.zoneOrderItem.dragOver{border-color:#111; box-shadow:0 0 0 1px #111 inset}
+.zoneOrderIndex{width:26px; text-align:center; font-weight:900; color:#64748b}
+.zoneOrderHandle{font-size:18px; line-height:1; color:#111; user-select:none}
+.zoneOrderName{font-weight:800; flex:1}
+.zoneOrderActions{display:flex; gap:8px}
+.zoneOrderBtn{border:1px solid #d1d5db; background:#fff; border-radius:10px; padding:6px 10px; font-weight:800; cursor:pointer}
+.zoneOrderFooter{display:flex; justify-content:flex-end; gap:10px; margin-top:16px}
+"""
+
+ZONE_ORDER_MODAL_HTML = r"""
+<div class="zoneOrderModal" id="zoneOrderModal">
+  <div class="panel">
+    <div class="head">
+      <h3 style="margin:0">Réorganiser les périmètres</h3>
+      <div style="margin-left:auto"></div>
+      <button class="memoBtn" id="zoneOrderClose" type="button">Fermer</button>
+    </div>
+    <div class="body">
+      <div class="zoneOrderHelp">Seuls les périmètres présents dans ce compte rendu sont listés. Les doublons liés à la pagination sont regroupés automatiquement avant réorganisation.</div>
+      <div class="zoneOrderList" id="zoneOrderList"></div>
+      <div class="zoneOrderFooter">
+        <button class="memoBtn" id="zoneOrderCancel" type="button">Annuler</button>
+        <button class="memoBtn memoBtnPrimary" id="zoneOrderApply" type="button">Appliquer l’ordre</button>
+      </div>
+    </div>
+  </div>
+</div>
+"""
+
+ZONE_ORDER_MODAL_JS = r"""
+(function(){
+  const modal = document.getElementById('zoneOrderModal');
+  const listEl = document.getElementById('zoneOrderList');
+  if(!modal || !listEl) return;
+
+  let order = [];
+  let dragId = '';
+
+  function renumber(){
+    listEl.querySelectorAll('.zoneOrderItem').forEach((item, index) => {
+      const idx = item.querySelector('.zoneOrderIndex');
+      if(idx){ idx.textContent = String(index + 1); }
+    });
+  }
+
+  function render(){
+    listEl.innerHTML = order.map((item, index) => `
+      <div class="zoneOrderItem" draggable="true" data-zone-id="${item.id}">
+        <div class="zoneOrderIndex">${index + 1}</div>
+        <div class="zoneOrderHandle">⋮⋮</div>
+        <div class="zoneOrderName">${item.label}</div>
+        <div class="zoneOrderActions">
+          <button type="button" class="zoneOrderBtn" data-move="up">↑</button>
+          <button type="button" class="zoneOrderBtn" data-move="down">↓</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function collect(){
+    if(typeof window.collectUniqueZonesForOrdering !== 'function'){ return []; }
+    const items = window.collectUniqueZonesForOrdering();
+    return Array.isArray(items) ? items : [];
+  }
+
+  function open(){
+    order = collect();
+    listEl.innerHTML = '';
+    if(!order.length){
+      listEl.innerHTML = "<div class='muted'>Aucun périmètre réorganisable dans ce compte rendu.</div>";
+    }else{
+      render();
+    }
+    modal.style.display = 'flex';
+  }
+
+  function close(){ modal.style.display = 'none'; }
+
+  function move(id, dir){
+    const idx = order.findIndex(item => item.id === id);
+    if(idx < 0) return;
+    const nextIdx = dir === 'up' ? idx - 1 : idx + 1;
+    if(nextIdx < 0 || nextIdx >= order.length) return;
+    const tmp = order[idx];
+    order[idx] = order[nextIdx];
+    order[nextIdx] = tmp;
+    render();
+  }
+
+  document.getElementById('btnZoneOrder')?.addEventListener('click', open);
+  document.getElementById('zoneOrderClose').onclick = close;
+  document.getElementById('zoneOrderCancel').onclick = close;
+  modal.addEventListener('click', (e)=>{ if(e.target===modal) close(); });
+
+  document.getElementById('zoneOrderApply').onclick = function(){
+    if(typeof window.applyZoneOrder === 'function'){
+      window.applyZoneOrder(order.map(item => item.id));
+    }
+    close();
+  };
+
+  listEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('.zoneOrderBtn');
+    const item = e.target.closest('.zoneOrderItem');
+    if(!btn || !item) return;
+    move(item.getAttribute('data-zone-id') || '', btn.getAttribute('data-move') || '');
+  });
+
+  listEl.addEventListener('dragstart', (e) => {
+    const item = e.target.closest('.zoneOrderItem');
+    if(!item) return;
+    dragId = item.getAttribute('data-zone-id') || '';
+    item.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', dragId);
+  });
+
+  listEl.addEventListener('dragend', (e) => {
+    const item = e.target.closest('.zoneOrderItem');
+    if(item){ item.classList.remove('dragging'); }
+    listEl.querySelectorAll('.zoneOrderItem').forEach(el => el.classList.remove('dragOver'));
+    dragId = '';
+  });
+
+  listEl.addEventListener('dragover', (e) => {
+    const over = e.target.closest('.zoneOrderItem');
+    if(!dragId || !over) return;
+    e.preventDefault();
+    listEl.querySelectorAll('.zoneOrderItem').forEach(el => el.classList.remove('dragOver'));
+    over.classList.add('dragOver');
+  });
+
+  listEl.addEventListener('drop', (e) => {
+    const over = e.target.closest('.zoneOrderItem');
+    if(!dragId || !over) return;
+    e.preventDefault();
+    const targetId = over.getAttribute('data-zone-id') || '';
+    if(!targetId || targetId === dragId) return;
+    const sourceIdx = order.findIndex(item => item.id === dragId);
+    const targetIdx = order.findIndex(item => item.id === targetId);
+    if(sourceIdx < 0 || targetIdx < 0) return;
+    const [moved] = order.splice(sourceIdx, 1);
+    order.splice(targetIdx, 0, moved);
+    render();
+    renumber();
   });
 })();
 """
@@ -1716,6 +2250,7 @@ CONSTRAINT_TOGGLES_JS = r"""
     keepSessionHeaderWithNext: true,
     printAutoOptimize: true,
     topScale: true,
+    editCommentText: false,
   };
 
   function loadState(){
@@ -1732,12 +2267,19 @@ CONSTRAINT_TOGGLES_JS = r"""
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }
 
-  function applyConstraint(name, active){
+  function applyConstraint(name, active, options){
+    const silent = !!(options && options.silent);
     body.classList.toggle(`constraint-off-${name}`, !active);
+    if(name === 'editCommentText' && typeof window.setCommentTextEditingEnabled === 'function'){
+      window.setCommentTextEditingEnabled(!!active);
+      if(active && !silent && typeof window.openTextEditWarning === 'function'){
+        window.openTextEditWarning();
+      }
+    }
   }
 
   function applyAll(state){
-    Object.entries(state).forEach(([k, v]) => applyConstraint(k, !!v));
+    Object.entries(state).forEach(([k, v]) => applyConstraint(k, !!v, {silent:true}));
   }
 
   const state = loadState();
@@ -1784,34 +2326,14 @@ CONSTRAINT_TOGGLES_JS = r"""
 
 LAYOUT_CONTROLS_JS = r"""
 (function(){
-  function closestZone(el){ return el.closest('.zoneBlock'); }
-  function move(zone, dir){
-    if(!zone) return;
-    if(dir === 'up'){
-      const prev = zone.previousElementSibling;
-      if(prev && prev.classList.contains('zoneBlock')){
-        zone.parentNode.insertBefore(zone, prev);
-      }
-    }else if(dir === 'down'){
-      const next = zone.nextElementSibling;
-      if(next && next.classList.contains('zoneBlock')){
-        zone.parentNode.insertBefore(next, zone);
-      }
-    }
-    if(window.repaginateReport){ window.repaginateReport(); }
-  }
   document.addEventListener('click', (e) => {
     const btn = e.target.closest('.zoneBtn');
     if(!btn) return;
     const action = btn.dataset.action || '';
-    const zone = closestZone(btn);
+    const zone = btn.closest('.zoneBlock');
     if(!zone) return;
     if(action === 'highlight'){
       zone.classList.toggle('highlight');
-    }else if(action === 'move-up'){
-      move(zone, 'up');
-    }else if(action === 'move-down'){
-      move(zone, 'down');
     }
   });
 })();
@@ -1922,10 +2444,32 @@ DRAGGABLE_IMAGES_JS = r"""
   function setupImageButtons(){
     document.querySelectorAll('.colComment').forEach(cell => {
       const btn = cell.querySelector('.btnAddImage');
+      const btnComment = cell.querySelector('.btnAddComment');
       const input = cell.querySelector('.imageInput');
       if(!btn || !input || btn.dataset.ready === '1') return;
       btn.dataset.ready = '1';
       btn.addEventListener('click', () => input.click());
+      if(btnComment && btnComment.dataset.ready !== '1'){
+        btnComment.dataset.ready = '1';
+        btnComment.addEventListener('click', () => {
+          const block = document.createElement('div');
+          block.className = 'entryComment';
+          block.innerHTML = "<button type='button' class='entryCommentRemove noPrint' title='Supprimer le commentaire' aria-label='Supprimer le commentaire'>×</button><div class='metaVal textEditTarget' data-text-edit-target='1'>Auteur • Société • Date</div><div style='margin-top:6px' class='textEditTarget' data-text-edit-target='1'>Commentaire…</div>";
+          cell.appendChild(block);
+          if(typeof window.setCommentTextEditingEnabled === 'function'){
+            window.setCommentTextEditingEnabled(!document.body.classList.contains('constraint-off-editCommentText'));
+          }
+        });
+      }
+      if(cell.dataset.commentRemoveReady !== '1'){
+        cell.dataset.commentRemoveReady = '1';
+        cell.addEventListener('click', (e) => {
+          const removeBtn = e.target.closest('.entryCommentRemove');
+          if(!removeBtn) return;
+          const comment = removeBtn.closest('.entryComment');
+          if(comment){ comment.remove(); }
+        });
+      }
       input.addEventListener('change', (e) => {
         const files = Array.from(e.target.files || []).filter(f => f.type.startsWith('image/'));
         if(!files.length) return;
@@ -1951,8 +2495,21 @@ DRAGGABLE_IMAGES_JS = r"""
     setupImageButtons();
   };
 
+  window.setCommentTextEditingEnabled = function(enabled){
+    document.querySelectorAll('[data-text-edit-target]').forEach(el => {
+      if(enabled){
+        el.setAttribute('contenteditable', 'true');
+        el.classList.add('textEditEnabled');
+      }else{
+        el.removeAttribute('contenteditable');
+        el.classList.remove('textEditEnabled');
+      }
+    });
+  };
+
   window.addEventListener('load', () => {
     window.enableDraggableThumbs();
+    window.setCommentTextEditingEnabled(!document.body.classList.contains('constraint-off-editCommentText'));
   });
 })();
 """
@@ -1991,17 +2548,11 @@ PAGINATION_JS = r"""
 
   function calcAvailable(page, includePresence){
     const pageContent = page.querySelector('.pageContent');
-    const footer = page.querySelector('.docFooter');
     const header = page.querySelector('.reportHeader');
     const pageRect = page.getBoundingClientRect();
     if(!pageContent) return pageRect.height;
     const styles = window.getComputedStyle(pageContent);
     let available = pageRect.height - px(styles.paddingTop) - px(styles.paddingBottom);
-    const reserveFooter = !document.body.classList.contains('constraint-off-footerReserve');
-    const rootStyles = getComputedStyle(document.documentElement);
-    const reserveFactorRaw = parseFloat((rootStyles.getPropertyValue('--footer-reserve-factor') || '1').trim());
-    const reserveFactor = Number.isNaN(reserveFactorRaw) ? 1 : reserveFactorRaw;
-    if(reserveFooter && footer){ available -= (footer.getBoundingClientRect().height * reserveFactor); }
     if(header){ available -= header.getBoundingClientRect().height; }
     return available;
   }
@@ -2033,6 +2584,66 @@ PAGINATION_JS = r"""
       });
     });
   }
+
+  function getMergedReportBlocks(container){
+    const firstPage = container?.querySelector('.page--report');
+    const blocksContainer = firstPage?.querySelector('.reportBlocks');
+    if(!container || !firstPage || !blocksContainer) return null;
+    mergeZoneBlocks(container);
+    return {firstPage, blocksContainer, blocks: Array.from(container.querySelectorAll('.reportBlock'))};
+  }
+
+  window.collectUniqueZonesForOrdering = function(){
+    const container = document.querySelector('.reportPages');
+    const merged = getMergedReportBlocks(container);
+    if(!merged) return [];
+    const seen = new Set();
+    const items = merged.blocks
+      .filter(block => block.classList.contains('zoneBlock'))
+      .map(block => {
+        const id = block.getAttribute('data-zone-id') || '';
+        const title = block.querySelector('.zoneTitle span')?.textContent?.trim() || id;
+        return {id, label: title};
+      })
+      .filter(item => {
+        if(!item.id || seen.has(item.id)){ return false; }
+        seen.add(item.id);
+        return true;
+      });
+    if(window.repaginateReport){ window.repaginateReport(); }
+    return items;
+  };
+
+  window.applyZoneOrder = function(zoneIds){
+    const container = document.querySelector('.reportPages');
+    const merged = getMergedReportBlocks(container);
+    if(!merged) return;
+    const {firstPage, blocksContainer, blocks} = merged;
+    const zoneMap = new Map();
+    blocks.filter(block => block.classList.contains('zoneBlock')).forEach(block => {
+      const id = block.getAttribute('data-zone-id') || '';
+      if(id && !zoneMap.has(id)){ zoneMap.set(id, block); }
+    });
+    const zoneBlocks = Array.from(zoneMap.values());
+    if(!zoneBlocks.length) return;
+    const orderedZones = [];
+    (Array.isArray(zoneIds) ? zoneIds : []).forEach(id => {
+      if(zoneMap.has(id)){ orderedZones.push(zoneMap.get(id)); zoneMap.delete(id); }
+    });
+    zoneMap.forEach(block => orderedZones.push(block));
+
+    const blockList = blocks.slice();
+    const firstZoneIndex = blockList.findIndex(block => block.classList.contains('zoneBlock'));
+    const lastZoneIndex = blockList.length - 1 - blockList.slice().reverse().findIndex(block => block.classList.contains('zoneBlock'));
+    if(firstZoneIndex < 0 || lastZoneIndex < firstZoneIndex) return;
+    const rebuilt = blockList.slice(0, firstZoneIndex).concat(orderedZones, blockList.slice(lastZoneIndex + 1));
+
+    rebuilt.forEach(block => block.remove());
+    clearExtraPages(container);
+    blocksContainer.innerHTML = '';
+    rebuilt.forEach(block => blocksContainer.appendChild(block));
+    if(window.repaginateReport){ window.repaginateReport(); }
+  };
 
   function getZoneSplitData(zone){
     const title = zone.querySelector('.zoneTitle');
@@ -2108,9 +2719,7 @@ PAGINATION_JS = r"""
     const blocks = Array.from(container.querySelectorAll('.reportBlock')).map(block => {
       const splitData = block.classList.contains('zoneBlock')
         ? getZoneSplitData(block)
-        : (block.classList.contains('presenceBlock')
-            ? getTableSplitData(block, 'table.presenceUsersTable')
-            : null);
+        : null;
       return {
         node: block,
         height: block.getBoundingClientRect().height || block.offsetHeight || 0,
@@ -2358,7 +2967,7 @@ body{{margin:0;background:#fff;color:var(--text);font:14px/1.45 system-ui,-apple
 @media(max-width:780px){{.grid{{grid-template-columns:1fr}}}}
 label{{display:block;font-weight:900;margin:0 0 6px}}
 select{{width:100%;padding:12px 12px;border-radius:12px;border:1px solid var(--border);background:#fff;font-weight:700}}
-.btn{{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:11px 14px;border-radius:12px;border:1px solid var(--border);background:var(--accent);color:#fff;font-weight:950;cursor:pointer;text-decoration:none}}
+.btn{{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:11px 14px;border-radius:12px;border:1px solid var(--border);background:#ff9999;color:#111;font-weight:950;cursor:pointer;text-decoration:none}}
 .btn.secondary{{background:#fff;color:var(--text);font-weight:900}}
 .hint{{color:var(--muted);margin-top:10px;font-weight:700}}
 </style>
@@ -2727,9 +3336,9 @@ def render_cr(
               <th>Prénom et Nom <span class="presenceGrip" data-col="0"></span></th>
               <th>Lot <span class="presenceGrip" data-col="1"></span></th>
               <th>Mail <span class="presenceGrip" data-col="2"></span></th>
-              <th>C <span class="presenceGrip" data-col="3"></span></th>
-              <th>P <span class="presenceGrip" data-col="4"></span></th>
-              <th>D <span class="presenceGrip" data-col="5"></span></th>
+              <th>P <span class="presenceGrip" data-col="3"></span></th>
+              <th>D <span class="presenceGrip" data-col="4"></span></th>
+              <th>C <span class="presenceGrip" data-col="5"></span></th>
             </tr>
           </thead>
           <tbody>
@@ -2752,6 +3361,7 @@ def render_cr(
         <button class="btn secondary editCompact" id="btnQualityCheck" type="button">Qualité du texte</button>
         <button class="btn secondary editCompact" id="btnAnalysis" type="button">Analyse</button>
         <button class="btn secondary editCompact" id="btnRange" type="button" onclick="toggleRangePanel()">Choisir une période</button>
+        <button class="btn secondary editCompact" id="btnZoneOrder" type="button">Réorganiser les périmètres</button>
         <button class="btn secondary editCompact" id="btnConstraints" type="button">Contraintes HTML / impression</button>
         <button class="btn secondary editCompact" id="btnPrintPreview" type="button">Aperçu impression : OFF</button>
         <select id="hiddenRowsSelect" class="hiddenRowsSelect" title="Lignes masquées">
@@ -2800,6 +3410,7 @@ def render_cr(
           <label><input type="checkbox" data-constraint="keepSessionHeaderWithNext" checked /> Ne pas laisser « En séance du » seul en bas de page</label>
           <label><input type="checkbox" data-constraint="printAutoOptimize" checked /> Optimisation auto avant impression</label>
           <label><input type="checkbox" data-constraint="topScale" checked /> Mise à l'échelle du bandeau haut</label>
+          <label><input type="checkbox" data-constraint="editCommentText" /> Autoriser l’édition de « Commentaires et observations » (HTML local uniquement)</label>
         </div>
       </div>
     """
@@ -2917,16 +3528,16 @@ def render_cr(
           <tr class="{row_cls} compactRow" data-row-id="{safe_row_id}" data-entry-type="{"task" if is_task else "memo"}">
             <td class="colType">{toggle_html}<div>{tag_html or "—"}</div></td>
             <td class="colComment">
-              <div class="rowImageTools noPrint"><button type="button" class="btnAddImage">+ Image</button><input type="file" class="imageInput" accept="image/*" multiple hidden /></div>
-              <div class="commentText">{title}</div>
+              <div class="rowImageTools noPrint"><button type="button" class="btnAddImage">+ Image</button><button type="button" class="btnAddComment">+ Commentaire</button><input type="file" class="imageInput" accept="image/*" multiple hidden /></div>
+              <div class="commentText textEditTarget" data-text-edit-target="1">{title}</div>
               {thumbs}
               {render_entry_comment(r)}
             </td>
             <td class="colDate">{created or "—"}</td>
+            <td class="colWho editableCell" contenteditable="true">{concerne_display}</td>
+            <td class="colLot editableCell" contenteditable="true">{lot_display}</td>
             <td class="colDate">{deadline_display}</td>
             <td class="colDate">{done_display}</td>
-            <td class="colLot editableCell" contenteditable="true">{lot_display}</td>
-            <td class="colWho editableCell" contenteditable="true">{concerne_display}</td>
           </tr>
         """
 
@@ -2958,8 +3569,6 @@ def render_cr(
           <div class="zoneTitle">
             <span>{zt}</span>
             <div class="zoneTools noPrint">
-              <button class="zoneBtn" type="button" data-action="move-up">↑</button>
-              <button class="zoneBtn" type="button" data-action="move-down">↓</button>
               <button class="zoneBtn" type="button" data-action="highlight">Surligner</button>
                                                         <button class="btnAddMemo" type="button" data-area="{zt}">+ Ajouter mémo</button>
             </div>
@@ -2969,20 +3578,20 @@ def render_cr(
               <col style="width:var(--col-type)" />
               <col style="width:var(--col-comment)" />
               <col style="width:var(--col-date)" />
-              <col style="width:var(--col-date)" />
-              <col style="width:var(--col-date)" />
-              <col style="width:var(--col-lot)" />
               <col style="width:var(--col-who)" />
+              <col style="width:var(--col-lot)" />
+              <col style="width:var(--col-date)" />
+              <col style="width:var(--col-date)" />
             </colgroup>
             <thead>
               <tr>
                 <th class="colType">Type <span class="colGrip" data-col="type"></span></th>
                 <th class="colComment">Commentaires et observations <span class="colGrip" data-col="comment"></span></th>
                 <th class="colDate">Écrit le <span class="colGrip" data-col="date"></span></th>
+                <th class="colWho">Concerne <span class="colGrip" data-col="who"></span></th>
+                <th class="colLot">Lot <span class="colGrip" data-col="lot"></span></th>
                 <th class="colDate">Pour le <span class="colGrip" data-col="date2"></span></th>
                 <th class="colDate">Fait le <span class="colGrip" data-col="date3"></span></th>
-                <th class="colLot">Lot <span class="colGrip" data-col="lot"></span></th>
-                <th class="colWho">Concerne <span class="colGrip" data-col="who"></span></th>
               </tr>
             </thead>
             <tbody>
@@ -3156,8 +3765,8 @@ def render_cr(
   --border:#e2e8f0;
   --soft:#f8fafc;
   --shadow:0 10px 30px rgba(2,6,23,.06);
-  --accent:#ff0000;
-  --brand-red:#ff0000;
+  --accent:#ff9999;
+  --brand-red:#f7c7ac;
   --blueSoft:#eff6ff;
   --blueBorder:#bfdbfe;
   --col-type:7%;
@@ -3177,8 +3786,8 @@ body{{padding:14px 14px 14px 280px;}}
 .wrap{{display:flex;flex-direction:column;gap:12px;align-items:center;}}
 .page{{width:210mm;height:297mm;min-height:297mm;position:relative;background:#fff;overflow:visible;break-after:page;page-break-after:always;}}
 .page:last-child{{break-after:auto;page-break-after:auto;}}
-.pageContent{{padding:10mm 8mm 34mm 8mm;}}
-.page--cover .pageContent{{padding:10mm 8mm 10mm 8mm;}}
+.pageContent{{padding:6mm 8mm 6mm 8mm;}}
+.page--cover .pageContent{{padding:6mm 8mm 6mm 8mm;}}
 .muted{{color:var(--muted)}}
 .small{{font-size:12px}}
 .noPrint{{}}
@@ -3201,27 +3810,32 @@ body.printPreviewMode .noPrintRow{{display:none!important}}
 .topPage{{transform:scale(var(--top-scale));transform-origin:top left}}
 @media print{{.topPage{{margin:0;}}}}
 .reportTables{{margin-top:0}}
-.coverLayout{{display:flex;flex-direction:column;gap:20px;padding:16mm 6mm 0 6mm}}
+.coverLayout{{display:flex;flex-direction:column;gap:10px;padding:4mm 6mm 0 6mm}}
 .coverBlock{{margin-bottom:6mm;}}
-.coverPresence{{margin-top:20px}}
-.coverHeader{{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}}
-.coverBrand{{display:flex;flex-direction:column;gap:10px;max-width:70%}}
-.coverSquare{{display:flex;align-items:flex-start;justify-content:flex-end}}
-.coverLogo{{height:78px;width:auto;display:block}}
-.coverSquareLogo{{height:92px;width:auto;display:block}}
+.coverPresence{{margin-top:4mm}}
+.coverHeaderLogo{{display:flex;justify-content:flex-start;align-items:flex-start;margin-bottom:10mm}}
+.coverLogo{{height:86px;width:auto;display:block}}
 .coverFooterMark{{height:16px;width:auto;display:block}}
-.coverMeetingLine{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:18px;font-weight:700;color:#111}}
-.coverDocRef{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:18px;font-weight:700;color:#111}}
-.coverTitleBlock{{text-align:right;font-weight:900;display:flex;flex-direction:column;align-items:flex-end;gap:6px;margin-top:22px;width:100%}}
-.coverTitle{{font-size:22px;font-weight:900;color:#111;letter-spacing:.4px}}
-.coverSubtitle{{font-size:22px;font-weight:900;color:#111;letter-spacing:.4px}}
+.coverProjectCard{{border:2px solid #111;display:grid;grid-template-columns:150px 1fr;gap:18px;padding:12px 14px;align-items:center;width:100%;max-width:none;margin:0}}
+.coverProjectImageWrap{{display:flex;align-items:center;justify-content:center;min-height:128px}}
+.coverProjectImage{{max-width:130px;max-height:130px;object-fit:contain;display:block}}
+.coverProjectImageFallback{{width:120px;height:120px;border:1px solid #d1d5db;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:900;color:#64748b}}
+.coverProjectMeta{{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px}}
+.coverProjectLabel{{font-family:Arial,sans-serif;font-size:14px;font-weight:700;line-height:1.2;color:#111}}
+.coverProjectTitle{{font-family:Arial,sans-serif;font-size:14px;font-weight:700;color:#111;line-height:1.2}}
+.coverProjectNumber{{font-family:Arial,sans-serif;font-size:14px;font-weight:700;color:#111;line-height:1.2}}
+.coverProjectDate{{font-family:Arial,sans-serif;font-size:14px;font-weight:700;color:#111;line-height:1.2}}
+.coverDocRef{{font-family:Arial,sans-serif;font-size:14px;font-weight:700;color:#111;max-width:100%}}
 .editInline{{display:inline-block;min-width:40px;padding:0 4px;border-bottom:2px dashed #cbd5e1;outline:none}}
+.coverInlineWide{{min-width:90px}}
+.coverInlineDate{{min-width:90px}}
 @media print{{.editInline{{border-bottom:none}}}}
-.nextMeetingBox{{margin:18px auto 0 auto;max-width:78%;border:2px solid #111;padding:12px 10px;font-weight:1000}}
-.nextMeetingLine1{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:18px}}
-.nextMeetingLine2{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:18px;color:var(--brand-red);margin-top:5px}}
-.nextMeetingLine3{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:18px;color:#111;margin-top:4px;outline:none}}
-@media print{{.coverTitle{{font-size:30px}} .coverSubtitle{{font-size:30px}} .coverMeetingLine{{font-size:20px}} .coverDocRef{{font-size:20px}}}}
+.nextMeetingBox{{margin:2mm 0 0 0;width:100%;max-width:none;border:2px solid #111;padding:10px 8px;text-align:center;break-inside:avoid;page-break-inside:avoid}}
+.nextMeetingLine1{{font-family:Arial,sans-serif;font-size:16px;font-weight:700;text-transform:uppercase}}
+.nextMeetingLine3{{font-family:Arial,sans-serif;font-size:16px;color:#111;margin-top:4px;outline:none;font-weight:700}}
+.editableDateHint{{display:inline-block;min-width:90px;padding:0 6px;border-bottom:2px dotted #111;letter-spacing:.5px}}
+.editableDateHint:empty::before{{content:attr(data-placeholder);color:#94a3b8;font-weight:600;letter-spacing:1px}}
+@media print{{.coverProjectLabel{{font-size:14px}} .coverProjectTitle{{font-size:14px}} .coverProjectNumber{{font-size:14px}} .coverProjectDate{{font-size:14px}} .nextMeetingLine1{{font-size:16px}} .nextMeetingLine3{{font-size:16px}} .editableDateHint{{border-bottom:none}}}}
 
 /* PROJECT BANNER */
 .banner{{
@@ -3265,8 +3879,8 @@ body.printPreviewMode .noPrintRow{{display:none!important}}
 }}
 .zoneTitle{{
   display:flex;align-items:center;gap:10px;
-  padding:6px 10px;border:1px solid var(--border);border-bottom:none;
-  background:var(--brand-red);color:#ffffff;font-weight:900;font-size:11px;text-transform:uppercase;
+  padding:6px 10px;border:1px solid #111;border-bottom:none;
+  background:var(--brand-red);color:#111;font-weight:900;font-size:11px;text-transform:uppercase;
 }}
 .zoneTitle button{{margin-left:auto}}
 .zoneTools{{display:flex;align-items:center;gap:6px;margin-left:auto}}
@@ -3310,7 +3924,7 @@ body.printPreviewMode .noPrintRow{{display:none!important}}
 
 .actions{{position:fixed;top:14px;left:14px;z-index:9999;display:flex;flex-direction:column;gap:8px;width:248px;padding:10px;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,.97);box-shadow:0 8px 24px rgba(2,6,23,.12)}}
 .actions .btn,.actions .hiddenRowsSelect{{width:100%}}
-.btn{{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:11px 14px;border-radius:12px;border:1px solid var(--border);background:var(--accent);color:#fff;font-weight:950;cursor:pointer;text-decoration:none}}
+.btn{{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:11px 14px;border-radius:12px;border:1px solid var(--border);background:#ff9999;color:#111;font-weight:950;cursor:pointer;text-decoration:none}}
 .btn.secondary{{background:#fff;color:var(--text);font-weight:900}}
 #btnPrintPreview.active{{background:#0f172a;color:#fff;border-color:#0f172a}}
 .rangePanel{{position:fixed;top:14px;left:14px;z-index:10001;width:248px;border:1px solid var(--border);border-radius:14px;padding:12px;background:#fff;display:flex;flex-direction:column;gap:10px;box-shadow:0 8px 24px rgba(2,6,23,.12);max-height:calc(100vh - 32px);overflow:auto}}
@@ -3366,7 +3980,8 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
 .crTable th, .crTable td{{border:1px solid var(--border);padding:6px 7px;vertical-align:top;page-break-inside:auto;break-inside:auto;}}
 .crTable tr{{page-break-inside:auto;break-inside:auto;}}
 .annexTable tr{{page-break-inside:auto;break-inside:auto;}}
-.crTable th{{background:#e5e7eb;color:#111;text-align:center;font-weight:900;font-size:11px;line-height:1.2;white-space:nowrap}}
+.crTable th{{background:var(--brand-red);color:#111;text-align:center;font-weight:900;font-size:11px;line-height:1.2;white-space:nowrap;border-color:#111}}
+.zoneBlock .crTable thead th{{border:1px solid #111!important}}
 .crTable td{{font-size:11px;line-height:1.24;word-break:normal;overflow-wrap:break-word;hyphens:none}}
 .crTable td.colDate, .crTable th.colDate{{padding:6px 4px}}
 
@@ -3375,10 +3990,15 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
 .sessionSubRow td.colComment{{font-size:12px;color:#111827;font-weight:900;text-decoration:none;}}
 .sessionSubRowCurrent td.colComment{{color:#1d4ed8;text-decoration:underline;text-underline-offset:2px;}}
 .colType{{text-align:center;font-weight:1000;white-space:nowrap;position:relative}}
-.colComment{{white-space:normal;position:relative}}
+.colComment{{white-space:normal;position:relative;text-align:justify}}
+.textEditTarget{{outline:none}}
+.textEditTarget.textEditEnabled{{background:#fff7ed;box-shadow:inset 0 0 0 1px #fdba74;border-radius:6px;padding:2px 4px}}
+.textEditTarget.textEditEnabled:focus{{box-shadow:inset 0 0 0 2px #fb923c}}
 .rowImageTools{{display:flex;justify-content:flex-end;margin-bottom:4px}}
 .btnAddImage{{border:1px solid #d1d5db;background:#fff;border-radius:8px;padding:2px 8px;font-size:11px;font-weight:800;cursor:pointer}}
 .btnAddImage:hover{{background:#f8fafc}}
+.btnAddComment{{border:1px solid #d1d5db;background:#fff;border-radius:8px;padding:2px 8px;font-size:11px;font-weight:800;cursor:pointer;margin-left:6px}}
+.btnAddComment:hover{{background:#f8fafc}}
 .colDate{{text-align:center;font-variant-numeric: tabular-nums;white-space:nowrap;position:relative}}
 .colLot{{text-align:center;white-space:nowrap;position:relative}}
 .colWho{{text-align:center;white-space:nowrap;position:relative}}
@@ -3391,7 +4011,7 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
 .crTable tr.rowDoneRecent td.colType div{{color:#15803d;font-weight:900;}}
 .rowHidden{{display:none!important}}
 .colGrip{{position:absolute;top:0;right:-6px;width:12px;height:100%;cursor:col-resize}}
-.colGrip::after{{content:"";position:absolute;top:3px;bottom:3px;left:5px;width:2px;background:#cbd5f5;border-radius:2px;opacity:.7}}
+.colGrip::after{{content:"";position:absolute;top:3px;bottom:3px;left:5px;width:2px;background:#111;border-radius:2px;opacity:.9}}
 
 @media print{{ .rowToggle{{display:none}} .noPrintRow{{display:none}} .editableCell{{background:transparent}} .rowImageTools{{display:none!important}} .thumbRemove{{display:none!important}} }}
 @media print{{ .sessionSubRow{{break-inside:avoid;page-break-inside:avoid}} .zoneTitle{{break-after:avoid-page;page-break-after:avoid}} }}
@@ -3403,9 +4023,15 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
 .thumbs{{margin-top:6px;display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start}}
 .thumb{{width:160px;height:auto;max-width:100%;border:1px solid var(--border);border-radius:8px;display:block;object-fit:cover;background:#fff}}
 .entryComment{{margin-top:8px;padding-left:12px;border-left:3px solid #e2e8f0}}
+.entryComment{{position:relative;padding:2px 34px 0 12px}}
+.entryCommentRemove{{position:absolute;top:2px;right:0;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border:1px solid #cbd5e1;border-radius:999px;background:#f8fafc;color:#475569;font-size:11px;line-height:1;font-weight:800;padding:0;box-shadow:0 1px 1px rgba(15,23,42,.08);cursor:pointer;transition:background-color .15s ease,border-color .15s ease,color .15s ease,transform .15s ease}}
+.entryCommentRemove:hover{{background:#fee2e2;border-color:#fca5a5;color:#b91c1c;transform:scale(1.05)}}
+.entryCommentRemove:focus-visible{{outline:2px solid #fb7185;outline-offset:1px}}
 .tagReminderGreen{{color:#16a34a;font-weight:900}}
 .thumbA{{display:inline-flex;cursor:grab}}
-.commentText{{font-weight:400;line-height:1.24;white-space:normal}}
+.commentText{{font-weight:400;line-height:1.24;white-space:normal;text-align:justify}}
+.entryComment .textEditTarget{{text-align:justify}}
+.topicComment{{text-align:justify}}
 .tagReminder{{color:#b91c1c;font-weight:900}}
 .thumbAWrap{{position:relative;display:inline-flex;touch-action:none;max-width:100%;align-items:flex-start}}
 .thumbAWrap.dragging{{opacity:.7;z-index:5}}
@@ -3427,6 +4053,7 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
   .thumbHandle{{display:none}}
   .thumbRemove{{display:none}}
   .btnAddImage{{display:none}}
+  .textEditTarget.textEditEnabled{{background:transparent!important;box-shadow:none!important;padding:0!important}}
 }}
 .annexTable{{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed;border:1px solid var(--border)}}
 .annexTable thead{{display:table-header-group}}
@@ -3435,6 +4062,7 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
 .annexTable td:last-child{{text-align:right}}
 .annexTable td:last-child .annexLink{{display:inline-block;text-align:right}}
 .annexTable th{{font-weight:900;background:var(--brand-red);color:#fff}}
+.annexTable th{{border-color:#111}}
 .annexTable .annexLink{{color:var(--brand-red);font-weight:800;text-decoration:underline;text-underline-offset:3px;cursor:pointer}}
 .annexTable .annexLink::after{{content:" ↗";font-weight:900;color:var(--brand-red)}}
 .annexTable tr:last-child td{{border-bottom:none}}
@@ -3450,8 +4078,9 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
 .reportHeader .accent{{color:#ff0000;font-weight:900}}
 .presenceTable .presenceList{{margin:0;padding-left:0;list-style:none;display:flex;flex-direction:column;gap:6px}}
 .presenceTable .presenceLine{{display:flex;align-items:center;gap:8px;font-weight:700}}
-.presenceBlock{{margin:8mm 0 6mm 0;}}
+.presenceBlock{{margin:2mm 0 0 0;}}
 .presenceUsersTable th{{text-align:left}}
+.presenceUsersTable th{{background:#ff9999!important;color:#111!important;border-color:#111!important}}
 .presenceUsersTable th:nth-child(4),
 .presenceUsersTable th:nth-child(5),
 .presenceUsersTable th:nth-child(6),
@@ -3459,18 +4088,13 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
 .presenceUsersTable td:nth-child(5),
 .presenceUsersTable td:nth-child(6){{text-align:center}}
 .presenceUsersTable td{{vertical-align:middle}}
+.presenceUsersTable th,.presenceUsersTable td{{font-size:11px;padding:4px 6px}}
 .presenceUsersTable .presenceFlag{{min-height:18px}}
 .presenceName{{display:inline-flex;align-items:center;gap:6px}}
 .presenceUsersTable th{{position:relative;padding-right:18px}}
 .presenceGrip{{position:absolute;top:0;right:-6px;width:12px;height:100%;cursor:col-resize}}
 .presenceGrip::after{{content:"";position:absolute;top:3px;bottom:3px;left:5px;width:2px;background:var(--brand-red);border-radius:2px;opacity:.9}}
 .presenceUsersTable th:hover .presenceGrip::after{{background:#b91c1c}}
-.docFooter{{position:absolute;left:0;right:0;bottom:0;height:20mm;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:3mm 10mm;border-top:2px solid var(--brand-red);background:#fff;overflow:hidden;width:100%;box-sizing:border-box}}
-.footLeft,.footCenter,.footRight{{position:absolute;z-index:2}}
-.footLeft{{left:0}}
-.footCenter{{left:50%;transform:translateX(-50%);display:flex;align-items:center;justify-content:center;font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:11px;font-weight:700;color:#111}}
-.footRight{{right:10mm;font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:9px;font-weight:700;color:#111;min-width:70px;text-align:right}}
-.footPageNumber{{display:inline-block}}
 .tempoLegal{{font-family:"Arial Nova Cond Light","Arial Narrow",Arial,sans-serif;font-size:10px;line-height:1.3;color:#6b7280;font-weight:600}}
 .footImg{{display:block;max-height:32px;width:auto}}
 .footMark{{max-height:16px}}
@@ -3480,56 +4104,63 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
   body{{padding:0}}
   .actions,.rangePanel,.constraintsPanel{{display:none!important}}
   .page{{width:210mm;min-height:297mm;height:auto;margin:0;box-shadow:none;break-after:auto;page-break-after:auto;}}
-  .page--report .pageContent{{padding-top:16mm;padding-bottom:16mm;}}
-  .page--cover .pageContent{{padding:10mm 8mm 20mm 8mm;}}
+  .page--report .pageContent{{padding-top:5mm;padding-bottom:5mm;}}
+  .page--cover .pageContent{{padding:5mm 8mm;}}
   .reportHeader{{position:absolute;top:0;left:0;right:0;background:#fff;padding:4mm 8mm 2mm 8mm;z-index:20;}}
-  .docFooter{{position:absolute;bottom:0;left:0;right:0;}}
   .presenceGrip{{display:none!important}}
   .presenceUsersTable thead{{display:table-header-group}}
   .presenceUsersTable tr{{break-inside:avoid;page-break-inside:avoid}}
 }}
 
+.reportPages > .page--report:first-child .reportBlocks{{min-height:255mm}}
+.reportPages > .page--report:first-child .nextMeetingBox{{margin-top:auto}}
+
 {EDITOR_MEMO_MODAL_CSS}
+{TEXT_EDIT_WARNING_MODAL_CSS}
 {QUALITY_MODAL_CSS}
 {ANALYSIS_MODAL_CSS}
+{ZONE_ORDER_MODAL_CSS}
 """
 
     # Banner / cover HTML
     logo_eiffage = _logo_data_url(LOGO_EIFFAGE_PATH)
-    logo_eiffage_square = _logo_data_url(LOGO_EIFFAGE_SQUARE_PATH)
-    logo_eiffage_square_90 = _logo_data_url(LOGO_EIFFAGE_SQUARE_90_PATH)
     cover_html = ""
 
     cr_date_txt = (meet_date or ref_date).strftime("%d/%m/%Y")
+    next_meeting_default = ((meet_date or ref_date) + timedelta(days=14)).strftime("%d/%m/%Y")
+    project_image_src = _img_src_from_ref(proj_img) or _img_src_from_ref(DEFAULT_MZA_COVER_IMAGE_PATH)
 
-    document_ref_default = f"{project}_CR_{cr_date_txt.replace('/', '')}"
     cover_html = f"""
       <div class='coverLayout'>
-        <div class='coverHeader'>
-          <div class='coverBrand'>
-            {("<img class='coverLogo' src='" + logo_eiffage + "' alt='EIFFAGE' />") if logo_eiffage else ""}
-            <div class='coverMeetingLine'>
-              Réunion <span contenteditable='true' class='editInline' data-sync='cr-number'>{_escape(cr_number_default)}</span>
-              du <strong>{_escape(cr_date_txt)}</strong>
-            </div>
-            <div class='coverDocRef' contenteditable='true' data-sync='doc-ref'>{_escape(document_ref_default)}</div>
-          </div>
-          <div class='coverSquare'>
-            {("<img class='coverSquareLogo' src='" + logo_eiffage_square + "' alt='EIFFAGE' />") if logo_eiffage_square else ""}
-          </div>
+        <div class='coverHeaderLogo'>
+          {("<img class='coverLogo' src='" + logo_eiffage + "' alt='EIFFAGE' />") if logo_eiffage else ""}
         </div>
-        <div class='coverTitleBlock'>
-          <div class='coverTitle' contenteditable='true'>- Compte Rendu -</div>
-          <div class='coverSubtitle' contenteditable='true'>{_escape(project)}</div>
+
+        <div class='coverProjectCard'>
+          <div class='coverProjectImageWrap'>
+            {("<img class='coverProjectImage' src='" + _escape(project_image_src) + "' alt='Projet MZA' />") if project_image_src else "<div class='coverProjectImageFallback'>MZA</div>"}
+          </div>
+          <div class='coverProjectMeta'>
+            <div class='coverProjectLabel' contenteditable='true'>MZA</div>
+            <div class='coverProjectTitle'>
+              Compte-rendu réunion
+              <span contenteditable='true' class='editInline coverInlineWide'>Équipe C&amp;C</span>
+            </div>
+            <div class='coverProjectNumber'>N°<span contenteditable='true' class='editInline' data-sync='cr-number'>{_escape(cr_number_default)}</span></div>
+            <div class='coverProjectDate'><span contenteditable='true' class='editInline coverInlineDate editableDateHint' data-placeholder='.. / .. / ....'>{_escape(cr_date_txt)}</span></div>
+          </div>
         </div>
       </div>
     """
 
-    report_header_html = f"""
-      <div class='reportHeader printHeaderFixed'>
-        {_escape(project)} <span class='accent'>— Compte Rendu</span> n°<span contenteditable='true' class='editInline' data-sync='cr-number'>{_escape(cr_number_default)}</span> — Réunion de Synthèse du {_escape(cr_date_txt)}
+    next_meeting_html = f"""
+      <div class='nextMeetingBox reportBlock'>
+        <div class='nextMeetingLine1'>Prochaine réunion</div>
+        <div class='nextMeetingLine3 editableDateHint' contenteditable='true' data-placeholder='.. / .. / ....'>{_escape(next_meeting_default)}</div>
       </div>
     """
+
+    report_header_html = ""
 
     top_html = ""
     annexes_html = ""
@@ -3598,37 +4229,21 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
 <body class="{'pdf' if print_mode else ''}">
   {actions_html}
   <div class="wrap">
-    <section class="page page--cover">
-      <div class="pageContent">
-        <div class="coverBlock">
-          {cover_html}
-          {top_html}
-        </div>
-      </div>
-      <div class="docFooter">
-        <div class="footLeft"></div>
-        <div class="footCenter">{("<img class='coverFooterMark' src='" + logo_eiffage_square_90 + "' alt='EIFFAGE' />") if logo_eiffage_square_90 else ""}</div>
-        <div class="footRight"><span class="footPageNumber"></span></div>
-      </div>
-    </section>
-
     <div class="reportPages">
       <section class="page page--report">
         <div class="pageContent">
           <div class="reportTables">
             {report_header_html}
             <div class="reportBlocks">
+              <div class="coverBlock reportBlock">{cover_html}{top_html}</div>
               {presence_block_html}
+              {next_meeting_html}
+              <div class="u-page-break"></div>
               {zones_html}
               {annexes_html}
               {report_note_html}
             </div>
           </div>
-        </div>
-        <div class="docFooter">
-          <div class="footLeft"></div>
-          <div class="footCenter">{("<img class='coverFooterMark' src='" + logo_eiffage_square_90 + "' alt='EIFFAGE' />") if logo_eiffage_square_90 else ""}</div>
-          <div class="footRight"><span class="footPageNumber"></span></div>
         </div>
       </section>
     </div>
@@ -3642,20 +4257,19 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
           <div class="reportBlocks"></div>
         </div>
       </div>
-      <div class="docFooter">
-        <div class="footLeft"></div>
-        <div class="footCenter">{("<img class='coverFooterMark' src='" + logo_eiffage_square_90 + "' alt='EIFFAGE' />") if logo_eiffage_square_90 else ""}</div>
-        <div class="footRight"><span class="footPageNumber"></span></div>
-      </div>
     </section>
   </template>
 
 {EDITOR_MEMO_MODAL_HTML}
+{TEXT_EDIT_WARNING_MODAL_HTML}
 {QUALITY_MODAL_HTML}
 {ANALYSIS_MODAL_HTML}
+{ZONE_ORDER_MODAL_HTML}
 <script>{EDITOR_MEMO_MODAL_JS}</script>
+<script>{TEXT_EDIT_WARNING_MODAL_JS}</script>
 <script>{QUALITY_MODAL_JS}</script>
 <script>{ANALYSIS_MODAL_JS}</script>
+<script>{ZONE_ORDER_MODAL_JS}</script>
 <script>{SYNC_EDITABLE_JS}</script>
 <script>{RANGE_PICKER_JS}</script>
 <script>{PRINT_PREVIEW_TOGGLE_JS}</script>
