@@ -860,8 +860,8 @@ def render_entry_comment(r) -> str:
     return f"""
       <div class="entryComment">
         <button type="button" class="entryCommentRemove noPrint" title="Supprimer le commentaire" aria-label="Supprimer le commentaire">×</button>
-        <div class="metaVal">{meta or "—"}</div>
-        <div style="margin-top:6px">{body}</div>
+        <div class="metaVal textEditTarget" data-text-edit-target="1">{meta or "—"}</div>
+        <div style="margin-top:6px" class="textEditTarget" data-text-edit-target="1">{body}</div>
       </div>
     """
 
@@ -1258,6 +1258,204 @@ EDITOR_MEMO_MODAL_JS = r"""
     const btn = e.target.closest(".btnAddMemo");
     if(!btn) return;
     open(btn.getAttribute("data-area")||"");
+  });
+})();
+"""
+
+TEXT_EDIT_WARNING_MODAL_CSS = r"""
+.textEditWarningModal{position:fixed; inset:0; padding:16px 16px 16px 290px; background:rgba(0,0,0,.35); display:none; align-items:flex-start; justify-content:center; overflow:auto; z-index:9999}
+.textEditWarningModal .panel{background:#fff; width:min(700px, calc(100vw - 330px)); max-height:calc(100vh - 32px); overflow:auto; border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,.25)}
+@media (max-width:1200px){.textEditWarningModal{padding:16px}.textEditWarningModal .panel{width:min(700px,94vw)}}
+.textEditWarningModal .head{display:flex; gap:12px; align-items:center; padding:16px 18px; border-bottom:1px solid #eee}
+.textEditWarningModal .body{padding:18px; line-height:1.5}
+.textEditWarningModal .actions{position:static; width:auto; padding:0; border:none; border-radius:0; background:transparent; box-shadow:none; display:flex; flex-direction:row; justify-content:flex-end; gap:10px; margin-top:18px}
+"""
+
+TEXT_EDIT_WARNING_MODAL_HTML = r"""
+<div class="textEditWarningModal" id="textEditWarningModal">
+  <div class="panel">
+    <div class="head">
+      <h3 style="margin:0">Avertissement édition texte</h3>
+      <div style="margin-left:auto"></div>
+      <button class="memoBtn" id="textEditWarningClose" type="button">Fermer</button>
+    </div>
+    <div class="body">
+      <div>Attention, les modifications textuelles réalisées dans <strong>Commentaires et observations</strong> ne seront pas mises à jour dans METRONOME.</div>
+      <div class="actions">
+        <button class="memoBtn memoBtnPrimary" id="textEditWarningAcknowledge" type="button">J’ai compris</button>
+      </div>
+    </div>
+  </div>
+</div>
+"""
+
+TEXT_EDIT_WARNING_MODAL_JS = r"""
+(function(){
+  const modal = document.getElementById('textEditWarningModal');
+  if(!modal) return;
+  function close(){ modal.style.display = 'none'; }
+  window.openTextEditWarning = function(){ modal.style.display = 'flex'; };
+  document.getElementById('textEditWarningClose').onclick = close;
+  document.getElementById('textEditWarningAcknowledge').onclick = close;
+  modal.addEventListener('click', (e)=>{ if(e.target===modal) close(); });
+})();
+"""
+
+ZONE_ORDER_MODAL_CSS = r"""
+.zoneOrderModal{position:fixed; inset:0; padding:16px 16px 16px 290px; background:rgba(0,0,0,.35); display:none; align-items:flex-start; justify-content:center; overflow:auto; z-index:9998}
+.zoneOrderModal .panel{background:#fff; width:min(760px, calc(100vw - 330px)); max-height:calc(100vh - 32px); overflow:auto; border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,.25)}
+@media (max-width:1200px){.zoneOrderModal{padding:16px}.zoneOrderModal .panel{width:min(760px,94vw)}}
+.zoneOrderModal .head{display:flex; gap:12px; align-items:center; padding:16px 18px; border-bottom:1px solid #eee}
+.zoneOrderModal .body{padding:18px}
+.zoneOrderHelp{color:#475569; font-size:13px; line-height:1.4; margin-bottom:12px}
+.zoneOrderList{display:flex; flex-direction:column; gap:10px}
+.zoneOrderItem{display:flex; align-items:center; gap:10px; border:1px solid #e2e8f0; border-radius:12px; padding:10px 12px; background:#fff; cursor:grab}
+.zoneOrderItem.dragging{opacity:.55}
+.zoneOrderItem.dragOver{border-color:#111; box-shadow:0 0 0 1px #111 inset}
+.zoneOrderIndex{width:26px; text-align:center; font-weight:900; color:#64748b}
+.zoneOrderHandle{font-size:18px; line-height:1; color:#111; user-select:none}
+.zoneOrderName{font-weight:800; flex:1}
+.zoneOrderActions{display:flex; gap:8px}
+.zoneOrderBtn{border:1px solid #d1d5db; background:#fff; border-radius:10px; padding:6px 10px; font-weight:800; cursor:pointer}
+.zoneOrderFooter{display:flex; justify-content:flex-end; gap:10px; margin-top:16px}
+"""
+
+ZONE_ORDER_MODAL_HTML = r"""
+<div class="zoneOrderModal" id="zoneOrderModal">
+  <div class="panel">
+    <div class="head">
+      <h3 style="margin:0">Réorganiser les périmètres</h3>
+      <div style="margin-left:auto"></div>
+      <button class="memoBtn" id="zoneOrderClose" type="button">Fermer</button>
+    </div>
+    <div class="body">
+      <div class="zoneOrderHelp">Seuls les périmètres présents dans ce compte rendu sont listés. Les doublons liés à la pagination sont regroupés automatiquement avant réorganisation.</div>
+      <div class="zoneOrderList" id="zoneOrderList"></div>
+      <div class="zoneOrderFooter">
+        <button class="memoBtn" id="zoneOrderCancel" type="button">Annuler</button>
+        <button class="memoBtn memoBtnPrimary" id="zoneOrderApply" type="button">Appliquer l’ordre</button>
+      </div>
+    </div>
+  </div>
+</div>
+"""
+
+ZONE_ORDER_MODAL_JS = r"""
+(function(){
+  const modal = document.getElementById('zoneOrderModal');
+  const listEl = document.getElementById('zoneOrderList');
+  if(!modal || !listEl) return;
+
+  let order = [];
+  let dragId = '';
+
+  function renumber(){
+    listEl.querySelectorAll('.zoneOrderItem').forEach((item, index) => {
+      const idx = item.querySelector('.zoneOrderIndex');
+      if(idx){ idx.textContent = String(index + 1); }
+    });
+  }
+
+  function render(){
+    listEl.innerHTML = order.map((item, index) => `
+      <div class="zoneOrderItem" draggable="true" data-zone-id="${item.id}">
+        <div class="zoneOrderIndex">${index + 1}</div>
+        <div class="zoneOrderHandle">⋮⋮</div>
+        <div class="zoneOrderName">${item.label}</div>
+        <div class="zoneOrderActions">
+          <button type="button" class="zoneOrderBtn" data-move="up">↑</button>
+          <button type="button" class="zoneOrderBtn" data-move="down">↓</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function collect(){
+    if(typeof window.collectUniqueZonesForOrdering !== 'function'){ return []; }
+    const items = window.collectUniqueZonesForOrdering();
+    return Array.isArray(items) ? items : [];
+  }
+
+  function open(){
+    order = collect();
+    listEl.innerHTML = '';
+    if(!order.length){
+      listEl.innerHTML = "<div class='muted'>Aucun périmètre réorganisable dans ce compte rendu.</div>";
+    }else{
+      render();
+    }
+    modal.style.display = 'flex';
+  }
+
+  function close(){ modal.style.display = 'none'; }
+
+  function move(id, dir){
+    const idx = order.findIndex(item => item.id === id);
+    if(idx < 0) return;
+    const nextIdx = dir === 'up' ? idx - 1 : idx + 1;
+    if(nextIdx < 0 || nextIdx >= order.length) return;
+    const tmp = order[idx];
+    order[idx] = order[nextIdx];
+    order[nextIdx] = tmp;
+    render();
+  }
+
+  document.getElementById('btnZoneOrder')?.addEventListener('click', open);
+  document.getElementById('zoneOrderClose').onclick = close;
+  document.getElementById('zoneOrderCancel').onclick = close;
+  modal.addEventListener('click', (e)=>{ if(e.target===modal) close(); });
+
+  document.getElementById('zoneOrderApply').onclick = function(){
+    if(typeof window.applyZoneOrder === 'function'){
+      window.applyZoneOrder(order.map(item => item.id));
+    }
+    close();
+  };
+
+  listEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('.zoneOrderBtn');
+    const item = e.target.closest('.zoneOrderItem');
+    if(!btn || !item) return;
+    move(item.getAttribute('data-zone-id') || '', btn.getAttribute('data-move') || '');
+  });
+
+  listEl.addEventListener('dragstart', (e) => {
+    const item = e.target.closest('.zoneOrderItem');
+    if(!item) return;
+    dragId = item.getAttribute('data-zone-id') || '';
+    item.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', dragId);
+  });
+
+  listEl.addEventListener('dragend', (e) => {
+    const item = e.target.closest('.zoneOrderItem');
+    if(item){ item.classList.remove('dragging'); }
+    listEl.querySelectorAll('.zoneOrderItem').forEach(el => el.classList.remove('dragOver'));
+    dragId = '';
+  });
+
+  listEl.addEventListener('dragover', (e) => {
+    const over = e.target.closest('.zoneOrderItem');
+    if(!dragId || !over) return;
+    e.preventDefault();
+    listEl.querySelectorAll('.zoneOrderItem').forEach(el => el.classList.remove('dragOver'));
+    over.classList.add('dragOver');
+  });
+
+  listEl.addEventListener('drop', (e) => {
+    const over = e.target.closest('.zoneOrderItem');
+    if(!dragId || !over) return;
+    e.preventDefault();
+    const targetId = over.getAttribute('data-zone-id') || '';
+    if(!targetId || targetId === dragId) return;
+    const sourceIdx = order.findIndex(item => item.id === dragId);
+    const targetIdx = order.findIndex(item => item.id === targetId);
+    if(sourceIdx < 0 || targetIdx < 0) return;
+    const [moved] = order.splice(sourceIdx, 1);
+    order.splice(targetIdx, 0, moved);
+    render();
+    renumber();
   });
 })();
 """
@@ -1721,6 +1919,7 @@ CONSTRAINT_TOGGLES_JS = r"""
     keepSessionHeaderWithNext: true,
     printAutoOptimize: true,
     topScale: true,
+    editCommentText: false,
   };
 
   function loadState(){
@@ -1737,12 +1936,19 @@ CONSTRAINT_TOGGLES_JS = r"""
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }
 
-  function applyConstraint(name, active){
+  function applyConstraint(name, active, options){
+    const silent = !!(options && options.silent);
     body.classList.toggle(`constraint-off-${name}`, !active);
+    if(name === 'editCommentText' && typeof window.setCommentTextEditingEnabled === 'function'){
+      window.setCommentTextEditingEnabled(!!active);
+      if(active && !silent && typeof window.openTextEditWarning === 'function'){
+        window.openTextEditWarning();
+      }
+    }
   }
 
   function applyAll(state){
-    Object.entries(state).forEach(([k, v]) => applyConstraint(k, !!v));
+    Object.entries(state).forEach(([k, v]) => applyConstraint(k, !!v, {silent:true}));
   }
 
   const state = loadState();
@@ -1789,34 +1995,14 @@ CONSTRAINT_TOGGLES_JS = r"""
 
 LAYOUT_CONTROLS_JS = r"""
 (function(){
-  function closestZone(el){ return el.closest('.zoneBlock'); }
-  function move(zone, dir){
-    if(!zone) return;
-    if(dir === 'up'){
-      const prev = zone.previousElementSibling;
-      if(prev && prev.classList.contains('zoneBlock')){
-        zone.parentNode.insertBefore(zone, prev);
-      }
-    }else if(dir === 'down'){
-      const next = zone.nextElementSibling;
-      if(next && next.classList.contains('zoneBlock')){
-        zone.parentNode.insertBefore(next, zone);
-      }
-    }
-    if(window.repaginateReport){ window.repaginateReport(); }
-  }
   document.addEventListener('click', (e) => {
     const btn = e.target.closest('.zoneBtn');
     if(!btn) return;
     const action = btn.dataset.action || '';
-    const zone = closestZone(btn);
+    const zone = btn.closest('.zoneBlock');
     if(!zone) return;
     if(action === 'highlight'){
       zone.classList.toggle('highlight');
-    }else if(action === 'move-up'){
-      move(zone, 'up');
-    }else if(action === 'move-down'){
-      move(zone, 'down');
     }
   });
 })();
@@ -1937,8 +2123,11 @@ DRAGGABLE_IMAGES_JS = r"""
         btnComment.addEventListener('click', () => {
           const block = document.createElement('div');
           block.className = 'entryComment';
-          block.innerHTML = "<button type='button' class='entryCommentRemove noPrint' title='Supprimer le commentaire' aria-label='Supprimer le commentaire'>×</button><div class='metaVal' contenteditable='true'>Auteur • Société • Date</div><div style='margin-top:6px' contenteditable='true'>Commentaire…</div>";
+          block.innerHTML = "<button type='button' class='entryCommentRemove noPrint' title='Supprimer le commentaire' aria-label='Supprimer le commentaire'>×</button><div class='metaVal textEditTarget' data-text-edit-target='1'>Auteur • Société • Date</div><div style='margin-top:6px' class='textEditTarget' data-text-edit-target='1'>Commentaire…</div>";
           cell.appendChild(block);
+          if(typeof window.setCommentTextEditingEnabled === 'function'){
+            window.setCommentTextEditingEnabled(!document.body.classList.contains('constraint-off-editCommentText'));
+          }
         });
       }
       if(cell.dataset.commentRemoveReady !== '1'){
@@ -1975,8 +2164,21 @@ DRAGGABLE_IMAGES_JS = r"""
     setupImageButtons();
   };
 
+  window.setCommentTextEditingEnabled = function(enabled){
+    document.querySelectorAll('[data-text-edit-target]').forEach(el => {
+      if(enabled){
+        el.setAttribute('contenteditable', 'true');
+        el.classList.add('textEditEnabled');
+      }else{
+        el.removeAttribute('contenteditable');
+        el.classList.remove('textEditEnabled');
+      }
+    });
+  };
+
   window.addEventListener('load', () => {
     window.enableDraggableThumbs();
+    window.setCommentTextEditingEnabled(!document.body.classList.contains('constraint-off-editCommentText'));
   });
 })();
 """
@@ -2051,6 +2253,66 @@ PAGINATION_JS = r"""
       });
     });
   }
+
+  function getMergedReportBlocks(container){
+    const firstPage = container?.querySelector('.page--report');
+    const blocksContainer = firstPage?.querySelector('.reportBlocks');
+    if(!container || !firstPage || !blocksContainer) return null;
+    mergeZoneBlocks(container);
+    return {firstPage, blocksContainer, blocks: Array.from(container.querySelectorAll('.reportBlock'))};
+  }
+
+  window.collectUniqueZonesForOrdering = function(){
+    const container = document.querySelector('.reportPages');
+    const merged = getMergedReportBlocks(container);
+    if(!merged) return [];
+    const seen = new Set();
+    const items = merged.blocks
+      .filter(block => block.classList.contains('zoneBlock'))
+      .map(block => {
+        const id = block.getAttribute('data-zone-id') || '';
+        const title = block.querySelector('.zoneTitle span')?.textContent?.trim() || id;
+        return {id, label: title};
+      })
+      .filter(item => {
+        if(!item.id || seen.has(item.id)){ return false; }
+        seen.add(item.id);
+        return true;
+      });
+    if(window.repaginateReport){ window.repaginateReport(); }
+    return items;
+  };
+
+  window.applyZoneOrder = function(zoneIds){
+    const container = document.querySelector('.reportPages');
+    const merged = getMergedReportBlocks(container);
+    if(!merged) return;
+    const {firstPage, blocksContainer, blocks} = merged;
+    const zoneMap = new Map();
+    blocks.filter(block => block.classList.contains('zoneBlock')).forEach(block => {
+      const id = block.getAttribute('data-zone-id') || '';
+      if(id && !zoneMap.has(id)){ zoneMap.set(id, block); }
+    });
+    const zoneBlocks = Array.from(zoneMap.values());
+    if(!zoneBlocks.length) return;
+    const orderedZones = [];
+    (Array.isArray(zoneIds) ? zoneIds : []).forEach(id => {
+      if(zoneMap.has(id)){ orderedZones.push(zoneMap.get(id)); zoneMap.delete(id); }
+    });
+    zoneMap.forEach(block => orderedZones.push(block));
+
+    const blockList = blocks.slice();
+    const firstZoneIndex = blockList.findIndex(block => block.classList.contains('zoneBlock'));
+    const lastZoneIndex = blockList.length - 1 - blockList.slice().reverse().findIndex(block => block.classList.contains('zoneBlock'));
+    if(firstZoneIndex < 0 || lastZoneIndex < firstZoneIndex) return;
+    const rebuilt = blockList.slice(0, firstZoneIndex).concat(orderedZones, blockList.slice(lastZoneIndex + 1));
+
+    rebuilt.forEach(block => block.remove());
+    clearExtraPages(container);
+    blocksContainer.innerHTML = '';
+    rebuilt.forEach(block => blocksContainer.appendChild(block));
+    if(window.repaginateReport){ window.repaginateReport(); }
+  };
 
   function getZoneSplitData(zone){
     const title = zone.querySelector('.zoneTitle');
@@ -2768,6 +3030,7 @@ def render_cr(
         <button class="btn secondary editCompact" id="btnQualityCheck" type="button">Qualité du texte</button>
         <button class="btn secondary editCompact" id="btnAnalysis" type="button">Analyse</button>
         <button class="btn secondary editCompact" id="btnRange" type="button" onclick="toggleRangePanel()">Choisir une période</button>
+        <button class="btn secondary editCompact" id="btnZoneOrder" type="button">Réorganiser les périmètres</button>
         <button class="btn secondary editCompact" id="btnConstraints" type="button">Contraintes HTML / impression</button>
         <button class="btn secondary editCompact" id="btnPrintPreview" type="button">Aperçu impression : OFF</button>
         <select id="hiddenRowsSelect" class="hiddenRowsSelect" title="Lignes masquées">
@@ -2816,6 +3079,7 @@ def render_cr(
           <label><input type="checkbox" data-constraint="keepSessionHeaderWithNext" checked /> Ne pas laisser « En séance du » seul en bas de page</label>
           <label><input type="checkbox" data-constraint="printAutoOptimize" checked /> Optimisation auto avant impression</label>
           <label><input type="checkbox" data-constraint="topScale" checked /> Mise à l'échelle du bandeau haut</label>
+          <label><input type="checkbox" data-constraint="editCommentText" /> Autoriser l’édition de « Commentaires et observations » (HTML local uniquement)</label>
         </div>
       </div>
     """
@@ -2934,7 +3198,7 @@ def render_cr(
             <td class="colType">{toggle_html}<div>{tag_html or "—"}</div></td>
             <td class="colComment">
               <div class="rowImageTools noPrint"><button type="button" class="btnAddImage">+ Image</button><button type="button" class="btnAddComment">+ Commentaire</button><input type="file" class="imageInput" accept="image/*" multiple hidden /></div>
-              <div class="commentText">{title}</div>
+              <div class="commentText textEditTarget" data-text-edit-target="1">{title}</div>
               {thumbs}
               {render_entry_comment(r)}
             </td>
@@ -2974,8 +3238,6 @@ def render_cr(
           <div class="zoneTitle">
             <span>{zt}</span>
             <div class="zoneTools noPrint">
-              <button class="zoneBtn" type="button" data-action="move-up">↑</button>
-              <button class="zoneBtn" type="button" data-action="move-down">↓</button>
               <button class="zoneBtn" type="button" data-action="highlight">Surligner</button>
                                                         <button class="btnAddMemo" type="button" data-area="{zt}">+ Ajouter mémo</button>
             </div>
@@ -3398,6 +3660,9 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
 .sessionSubRowCurrent td.colComment{{color:#1d4ed8;text-decoration:underline;text-underline-offset:2px;}}
 .colType{{text-align:center;font-weight:1000;white-space:nowrap;position:relative}}
 .colComment{{white-space:normal;position:relative}}
+.textEditTarget{{outline:none}}
+.textEditTarget.textEditEnabled{{background:#fff7ed;box-shadow:inset 0 0 0 1px #fdba74;border-radius:6px;padding:2px 4px}}
+.textEditTarget.textEditEnabled:focus{{box-shadow:inset 0 0 0 2px #fb923c}}
 .rowImageTools{{display:flex;justify-content:flex-end;margin-bottom:4px}}
 .btnAddImage{{border:1px solid #d1d5db;background:#fff;border-radius:8px;padding:2px 8px;font-size:11px;font-weight:800;cursor:pointer}}
 .btnAddImage:hover{{background:#f8fafc}}
@@ -3454,6 +3719,7 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
   .thumbHandle{{display:none}}
   .thumbRemove{{display:none}}
   .btnAddImage{{display:none}}
+  .textEditTarget.textEditEnabled{{background:transparent!important;box-shadow:none!important;padding:0!important}}
 }}
 .annexTable{{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed;border:1px solid var(--border)}}
 .annexTable thead{{display:table-header-group}}
@@ -3516,8 +3782,10 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
 .reportPages > .page--report:first-child .nextMeetingBox{{margin-top:auto}}
 
 {EDITOR_MEMO_MODAL_CSS}
+{TEXT_EDIT_WARNING_MODAL_CSS}
 {QUALITY_MODAL_CSS}
 {ANALYSIS_MODAL_CSS}
+{ZONE_ORDER_MODAL_CSS}
 """
 
     # Banner / cover HTML
@@ -3659,11 +3927,15 @@ body.constraint-off-topScale .topPage{{transform:none!important}}
   </template>
 
 {EDITOR_MEMO_MODAL_HTML}
+{TEXT_EDIT_WARNING_MODAL_HTML}
 {QUALITY_MODAL_HTML}
 {ANALYSIS_MODAL_HTML}
+{ZONE_ORDER_MODAL_HTML}
 <script>{EDITOR_MEMO_MODAL_JS}</script>
+<script>{TEXT_EDIT_WARNING_MODAL_JS}</script>
 <script>{QUALITY_MODAL_JS}</script>
 <script>{ANALYSIS_MODAL_JS}</script>
+<script>{ZONE_ORDER_MODAL_JS}</script>
 <script>{SYNC_EDITABLE_JS}</script>
 <script>{RANGE_PICKER_JS}</script>
 <script>{PRINT_PREVIEW_TOGGLE_JS}</script>
